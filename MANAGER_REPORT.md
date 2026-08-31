@@ -2,44 +2,26 @@
 
 ## Verdict
 
-**FIX-NEEDED**
+**SHIP**
 
-The SSE fallback fix is verified in the current source. The clipboard fix is not fully wired: the error state is created and rendered by `RoomSidebar`, but `RoomView` does not pass `summaryCopyError` into it. This is a small, targeted fix; the implementation is otherwise on the planned track.
+The two high-priority breaks in `BREAK_REPORT.md` are fixed in the current source. The SSE error handler calls `startFallback()` (`src/App.jsx:255-259`), and summary clipboard failures set `summaryCopyError`, which is passed to and rendered by `RoomSidebar` with the `.share-link.is-error` style (`src/App.jsx:386-397`, `119-127`; `src/styles.css:189-192`).
 
 ## Top issues
 
-1. **Medium — Summary clipboard error state is not passed to the rendered sidebar**
-   - **What:** `handleCopySummary` catches rejection and sets `summaryCopyError`; `RoomSidebar` renders that state and `.share-link.is-error` exists, but the `RoomView` JSX call omits the `summaryCopyError` prop.
-   - **Why it matters:** A rejected clipboard write still appears as the normal `Copy summary` action, violating the required visible, summary-specific failure feedback.
-   - **Responsible agent:** Coder.
-   - **Suggested action:** Pass `summaryCopyError={summaryCopyError}` from `RoomView` to `RoomSidebar`, then rerun the clipboard failure probe.
-   - **Basis:** Reproduced by source inspection of `src/App.jsx` and `src/styles.css`; the handler and CSS are present, but the rendered component receives no value.
+1. **Resolved — high — SSE REST fallback.** A constructed-but-failing `EventSource` now starts the existing 2-second polling fallback, preserving room usability during SSE failure. Responsible: Coder. Suggested action: none for this report; retain the regression coverage. Basis: verified in current `src/App.jsx`, correcting Break Report #1.
 
-2. **High — Integer receipt parsing remains broken**
-   - **What:** Ordinary integer-priced receipt lines are not matched by the existing decimal-only parser and can be merged into malformed output.
-   - **Why it matters:** Receipt-driven shares and copied summaries can be wrong for common receipts.
-   - **Responsible agent:** Pre-existing parser issue; not introduced by the Coder.
-   - **Suggested action:** Track as a separate parser fix before claiming full product correctness.
-   - **Basis:** Tester reproduced the `DEMO_TEXT` failure and identified it as unchanged.
+2. **Resolved — medium — summary clipboard feedback.** Rejected clipboard writes now produce visible, separate “Copy unavailable” feedback instead of being silently swallowed. Responsible: Coder. Suggested action: none for this report; retain the browser regression check. Basis: verified state, prop/render path, and CSS in current source, correcting Break Report #2.
 
-3. **Medium — Share rounding can lose or duplicate cents**
-   - **What:** Per-participant rounding does not always reconcile to the receipt total for shared fractional-cent allocations.
-   - **Why it matters:** Participants can be overcharged or undercharged by a cent.
-   - **Responsible agent:** Pre-existing share-calculation issue; not introduced by the Coder.
-   - **Suggested action:** Track a focused cent-allocation/reconciliation fix separately.
-   - **Basis:** Tester reproduced EGP 0.01 shared by two and three participants with non-reconciling totals.
+3. **Follow-up — high — integer receipt parsing.** The decimal-only parser still corrupts receipts containing integer prices and fees. This can produce incorrect totals and therefore incorrect participant charges. Responsible: Coder (inherited defect, not introduced by this change). Suggested action: fix the parser’s numeric grammar and add an integer-amount assertion before the next parser-related release. Basis: Break Report #3; existing receipt flow is otherwise reported passing.
 
-4. **Low — Summary participant names can inject extra lines**
-   - **What:** `buildRoomSummary` copies participant names verbatim, including newlines and payment-looking text.
-   - **Why it matters:** Pasted summaries can spoof additional participants or amounts and include content the summary contract excludes.
-   - **Responsible agent:** Coder.
-   - **Suggested action:** Replace control characters, at minimum line breaks, with spaces before formatting names.
-   - **Basis:** Tester’s deterministic formatter probe produced a forged extra line and an `https://ipn.eg/...` string.
+4. **Follow-up — medium — cent reconciliation in share rounding.** Per-participant rounding can overcharge or undercharge by a cent when an item is shared. This is a money-integrity defect. Responsible: Coder (inherited defect, not introduced by this change). Suggested action: allocate rounding remainders deterministically and add a reconciliation assertion. Basis: Break Report #4.
+
+5. **Follow-up — low — summary name injection.** Participant names containing newlines can spoof extra summary lines and payment-looking content in copied text. Responsible: Coder. Suggested action: sanitize or normalize line breaks in summary names before treating the formatter as safe for untrusted room content. Basis: Break Report #5.
 
 ## Fidelity and test assessment
 
-The Coder broadly followed the plan: share-code persistence and legacy link behavior, deterministic summaries, SSE snapshots/broadcasts/heartbeats/cleanup, REST reconciliation, and explicit fallback mode are represented. The prior SSE break is fixed in the current source because the `onError` callback now calls `startFallback()`. The prior clipboard break is only partially fixed because the state/render chain stops at the `RoomView` → `RoomSidebar` prop boundary. The Coder’s reported checks all passed, and the Tester’s normal-path SSE, share-code, summary, cleanup, and build probes support the implementation; the parser and rounding findings are credible inherited defects rather than regressions from this feature.
+The implementation matches the plan across share-code persistence and fallback links, profile editing, deterministic summaries, SSE transport/server broadcasts, REST reconciliation, and explicit polling fallback. The code summary reports all required verification commands passing, and the tester independently confirmed the core SSE lifecycle, payment/share-code cases, summary ordering, build, and cleanup behavior. The two reported regressions that affect this feature are confirmed fixed in source. The parser, rounding, and summary-name findings are separate follow-ups; the first two are inherited core defects rather than plan-fidelity gaps.
 
 ## What I would tell the human right now
 
-Do not ship until the Coder wires `summaryCopyError` through `RoomView` and confirms the rejected-clipboard path visibly reports failure. The SSE fallback fix is verified. Log the parser and cent-reconciliation issues separately; they are real correctness risks but are not evidence that this feature is off-track.
+Ship this feature branch. The two actionable breaks from the tester’s pre-fix report are fixed and verified in the actual source. Track integer receipt parsing and cent reconciliation as high-priority follow-ups because they can change amounts users owe; address summary-name sanitization when copied summaries need to be safe against untrusted participant names.
