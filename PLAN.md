@@ -1,93 +1,71 @@
-# SplitShare Feature Plan
+# SplitShare: Share Codes, Text Summaries, and Real-Time Sync
 
 ## Overview
 
-Build these three changes as one sync-layer and room-view pass:
+Build the three requested enhancements in the existing React + Vite + Node/SQLite application:
 
-1. Store an optional `instapayShareCode` on each local profile and participant snapshot, expose it in the create/edit profile UI, and use the room owner’s value when a username must be turned into an InstaPay link.
-2. Add a pure room-summary formatter and a room-view `Copy summary` action that copies participant names and current calculated EGP shares as plain text.
-3. Replace the two-second room polling interval with native Server-Sent Events (SSE), while retaining REST for initial reconciliation, writes, reconnect fallback, and create/join flows.
+1. Store an optional InstaPay share code on the local profile and the corresponding room participant. Use the owner participant's code when a username must be turned into a payment link.
+2. Add a room-view `Copy summary` action that copies the current participant shares as plain text.
+3. Replace the normal two-second room poll with server-sent events (SSE), while retaining REST reads for initial reconciliation and fallback and retaining the current optimistic PUT queue.
 
-The split math, receipt parsing, settlement states, localStorage room cache, Vite host binding, and `VITE_API_BASE` behavior remain unchanged.
+The room object, receipt parser, share calculation, settlement states, SQLite table, Vite host binding, and `VITE_API_BASE` behavior remain otherwise unchanged.
 
-### Acceptance criteria
+## Acceptance criteria
 
-- A profile can save an optional share code. New rooms and edited participants carry it forward; old profiles and rooms without it still work with the legacy `23bZwC` fallback.
-- The paid-by-host link uses the owner’s participant share code when the owner value is a username. A complete `https://ipn.eg/...` link remains unchanged.
-- `Copy summary` produces deterministic text in participant order, including the current room code and calculated shares, with no app URL or payment link required.
-- A room client opens one SSE channel while the room is active, receives updates after another client’s successful room update, closes the channel on exit, and does not run the old two-second polling interval.
-- If SSE is unavailable, the REST GET still hydrates the room and is retried on SSE errors; room writes continue through the existing PUT queue.
-- `check-math`, `check-receipt`, `check-payment`, `check:sync`, and `npm run build` pass.
+- A profile can save an `instapayShareCode`; it survives localStorage reload and is copied into a newly created or joined participant.
+- A legacy profile/participant without a share code still works. Full `https://ipn.eg/...` links pass through unchanged; username-based links use the legacy `23bZwC` fallback when no configured code exists.
+- A host code edit updates the owner participant in the active room and is sent through the existing room PUT flow, so other clients use the new code.
+- `Copy summary` copies a deterministic plain-text block containing the room code, every current participant, and that participant's current calculated amount. It does not include an app URL or require InstaPay.
+- A connected room receives another client's room update without waiting for a normal poll interval.
+- Opening the real-time channel performs a REST reconciliation; SSE failure or lack of `EventSource` leaves the app usable through REST fallback.
+- Existing create, join, room update, localStorage, payment, parser, and receipt math flows continue to work.
+- Verification passes:
 
-## Current-state evidence
+  ```text
+  node scripts/check-math.mjs
+  node scripts/check-receipt.mjs
+  node scripts/check-payment.mjs
+  npm run check:sync
+  npm run build
+  ```
 
-Inspected directly:
+## Current architecture and seams
 
-- `src/lib/splitShareStore.js`: profile/participant construction, localStorage normalization, hardcoded InstaPay fallback, and share calculation.
-- `src/App.jsx`: welcome profile form, room sidebar payment link, invite copy action, room update queue, and the `setInterval(pullRoom, 2000)` lifecycle.
-- `src/lib/syncApi.js`: REST URL construction from `VITE_API_BASE` and room CRUD calls.
-- `server/sync-server.mjs`: one-process Node `http` server, SQLite room state, and PUT persistence boundary.
-- `scripts/check-math.mjs`, `scripts/check-payment.mjs`, `scripts/check-sync.mjs`, and `scripts/check-receipt.mjs`: current deterministic verification style.
-- `package.json` and `vite.config.js`: no realtime dependency, Node `>=22.5.0`, `/api` proxy, `0.0.0.0` host binding, and existing allowed hosts.
+- `src/lib/splitShareStore.js` owns localStorage state, profile/participant construction and normalization, InstaPay link construction, receipt math, and settlement transitions.
+- `src/App.jsx` owns the React state, optimistic local updates, the serialized remote PUT queue/retry, create/join flows, and the current `setInterval` GET poll. `RoomSidebar` owns the invite, participant, payment, and local-friends controls.
+- `src/lib/syncApi.js` is the existing `VITE_API_BASE`-aware REST transport seam.
+- `server/sync-server.mjs` stores each room as JSON in SQLite and handles POST/GET/PUT through one Node HTTP server. The PUT handler is the single place where a changed room is persisted and can be broadcast.
+- `scripts/check-payment.mjs`, `scripts/check-math.mjs`, and `scripts/check-sync.mjs` already provide small deterministic assertion checks and should be extended rather than adding a test framework.
+- No profile route or profile editor currently exists. The requested profile/edit-screen is therefore interpreted as a compact editor opened from the active-room header/avatar, with the same optional field also available in the welcome create/join form so a user can configure it before creating a room.
 
-No `ANSWERS.md` exists. Existing planning/design files were intentionally not used because the request says they may belong to unrelated work.
+## Architecture
 
-### External evidence and alternatives
+### 1. Profile and InstaPay share code
 
-Observed 2026-08-31:
+Add `instapayShareCode` as an optional string to the local profile. Normalize missing legacy values to an empty string in memory; do not write the old hardcoded value into new profiles.
 
-- [MDN: Using server-sent events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events) establishes that browser `EventSource` is a native one-way stream with automatic reconnect, `text/event-stream` framing, named events, and an explicit `.close()` method. It also notes the browser connection limit and the need for keep-alive comments.
-- [Node.js HTTP documentation](https://nodejs.org/api/http.html) establishes that the existing `ServerResponse` supports repeated `write()` calls and `flushHeaders()`, which is sufficient for a dependency-free SSE endpoint.
-- [Socket.IO documentation](https://socket.io/docs/v4/) is the main heavier alternative: it adds bidirectional messaging, heartbeats, buffering, reconnect backoff, and transport fallback, but also adds a protocol and dependency that this one-way room-update channel does not need.
-- [Supabase Realtime Broadcast documentation](https://supabase.com/docs/guides/realtime/broadcast) is the managed-service alternative: it provides low-latency channel broadcast and scaling/authorization primitives, but violates the existing Node + SQLite/local-first constraint and introduces vendor/runtime configuration.
+Pass the same field through `makeParticipant`, `createRoom`, and `joinRoom`, and preserve it in participant normalization. The room's owner participant is the source of truth for the host payment button because the room is the shared state seen by all participants.
 
-Recommendation: native SSE. It fits the existing stack, needs no package or lockfile change, and client-to-server actions already use REST. The recommendation becomes wrong if the server is deployed across multiple processes/instances, room traffic grows materially, authentication is added to the stream, or the app needs client-to-client messages, presence, or offline event replay; then use a broker-backed realtime service or a WebSocket/SSE gateway.
-
-## Architecture and data model
-
-### Profile and participant records
-
-Keep the current profile object and add one optional string:
-
-```text
-profile = {
-  id?, name, instapayLink, instapayShareCode?, emoji
-}
-```
-
-`makeParticipant()` copies `instapayShareCode` into the participant snapshot. `normalizeParticipant()` and `getStoredState()` normalize a missing value to `''` without changing existing fields. The room owner’s participant is the source used by the room payment button, because the room is what other devices receive.
-
-The existing local `friends` record does not need a new field for this feature. If a friend object is passed into `joinRoom`, the participant constructor may accept a supplied code, but friend CRUD/UI remains out of scope.
-
-Profile editing must update both local state and the matching participant in the active room. Preserve the participant ID and `ownerId`; update only editable profile fields and derived display fields. Queue the updated room through the existing PUT path so other clients receive the changed owner code.
-
-### InstaPay link contract
-
-Change the pure helper to:
+Change the link helper interface to accept the selected code:
 
 ```text
-buildInstapayLink(linkOrUsername, instapayShareCode = legacy fallback)
+buildInstapayLink(linkOrUsername, instapayShareCode)
 ```
 
 Behavior:
 
-- Trim both inputs.
-- Return a complete `https://ipn.eg/...` value unchanged, preserving current behavior.
-- Otherwise build `https://ipn.eg/S/<encoded username>/instapay/<encoded share code>`.
-- Use `23bZwC` only when the profile has no share code, explicitly as a backwards-compatibility fallback.
-- Keep the input bounded by the existing UI length limit and encode path segments. Do not invent a stricter InstaPay code format without a product/API source.
+- An existing full `https://ipn.eg/...` value is returned unchanged.
+- A username is encoded into the existing `/S/<username>/instapay/<code>` shape.
+- A valid configured code is used for that username path.
+- A missing or invalid code uses a clearly named legacy fallback constant containing `23bZwC`, preserving current behavior for old stored data.
 
-The profile create/edit field should be labeled as an InstaPay link or username so the already-supported helper fallback is reachable from the UI. A full link remains accepted; a non-empty username is accepted for this profile field. Existing saved-friend validation can remain full-link-only because it is unrelated to the requested per-profile setting.
+Validate user-entered codes at the UI boundary: trim them, limit their length, and accept only the InstaPay share-code character set used by the existing example (ASCII letters and digits). An invalid non-empty value is rejected with an inline error; an empty value means legacy fallback.
 
-### Summary contract
+The profile editor saves the local profile and updates the current viewer's matching participant in the active room. If that participant is the owner, the update is queued through the existing remote room PUT, which makes the new code available to other clients. Cancel leaves both profile and room unchanged.
 
-Add a pure helper in `src/lib/splitShareStore.js`:
+### 2. Plain-text room summary
 
-```text
-buildSplitSummary(room) -> string
-```
-
-It calls the existing `calculateShares(room.receipt, participantIds)` and returns:
+Add one pure formatter beside the existing share calculation, for example `buildRoomSummary(room)`, so the output is deterministic and testable without rendering React. It should call the existing `calculateShares` and format:
 
 ```text
 SplitShare — Room ABC123
@@ -95,124 +73,126 @@ Mina — EGP 189.71
 Omar — EGP 142.29
 ```
 
-Use current participant order and `amount.toFixed(2)`. A missing receipt naturally yields the calculator’s current zero amounts; do not add a second calculation or receipt-total rule.
+Use participant order from `room.participants`; include each participant even when the current calculation is zero. With no receipt, the existing calculation naturally yields zero amounts. Do not include InstaPay links, app URLs, receipt internals, or settlement state.
 
-### SSE protocol
+Expose the action in `RoomSidebar`, near the invite card/code. Use the existing copy icon and button styles, but keep summary-copy feedback separate from invite-copy feedback so the two actions cannot announce the wrong result. Use `navigator.clipboard.writeText` and an accessible live status; preserve the existing optional-clipboard behavior for local previews.
 
-Add this endpoint without changing SQLite schema:
+### 3. SSE room channel
+
+Use native browser `EventSource`; do not add a WebSocket package or another server dependency.
+
+Server endpoint:
 
 ```text
 GET /api/rooms/:code/events
-Content-Type: text/event-stream; charset=utf-8
-Cache-Control: no-cache
-Connection: keep-alive
-
-event: room.updated
-data: {"room": { ...full room state... }}
-
 ```
 
 Server behavior:
 
-- Validate and look up the room before opening the stream; return the existing JSON 404 for an unknown room.
-- Maintain `Map<roomCode, Set<ServerResponse>>` inside `createSyncServer()`.
-- Send the current room once when a stream connects, then retain the response.
-- After a successful SQLite `PUT`, broadcast the persisted full room to every current listener for that code, including the writer. Broadcast only after the database update succeeds.
-- Send an SSE comment heartbeat approximately every 15 seconds to prevent idle proxy/socket timeouts.
-- Remove a response on its `close` event; `close()` must clear the heartbeat, end active streams, and close the database.
-- Keep the current permissive CORS headers on the stream so both the Vite proxy and an absolute `VITE_API_BASE` work.
+- Validate the six-character room code and return the existing JSON 404 if the room does not exist.
+- Set `text/event-stream`, `cache-control: no-cache`, keep-alive, CORS, and buffering-safe headers.
+- Register the response in an in-memory `Map<roomCode, Set<Response>>` and immediately send the current room as a named `room` event, with the same `{ room }` payload shape used by REST.
+- On every successful room PUT, persist first, then broadcast the new room to all subscribers for that code. POST does not need a broadcast because a room cannot have an established subscriber before it exists.
+- Send a low-frequency SSE comment heartbeat to keep idle connections alive. Remove a response on `close`, clear its heartbeat, and close all subscribers during server shutdown.
+- Keep the existing SQLite schema and POST/GET/PUT response contracts unchanged.
 
-Known ceiling: listeners are process-local and updates are last-write-wins because the existing API sends full room snapshots. Mark this deliberately in the server with a `ponytail:` comment naming the upgrade path (shared broker/versioned patch protocol) if the Coder adds the implementation comment.
+`src/lib/syncApi.js` should retain the current JSON request helper and add a small `subscribeToRoom(code, handlers)` wrapper that builds the events URL from the same `VITE_API_BASE` normalization, creates `EventSource`, parses named `room` events, reports `open`/`error`, and returns an idempotent close function.
 
-## Components and interfaces
+In `App.jsx`, replace the normal polling effect with a room-code-scoped SSE lifecycle:
 
-### `src/lib/splitShareStore.js`
+1. Open the channel when a room is present and close it when the room changes or the user leaves.
+2. On channel open, issue one `getRemoteRoom(code)` reconciliation. If a pushed event arrived while that GET was in flight, do not let the older GET overwrite it; a small per-connection event sequence/ref is enough, and no server version column is needed.
+3. Apply a pushed room only when it is for the active room and there is no pending local room write. Reuse the current JSON equality check, `stateRef`, and `saveStoredState` path.
+4. Keep `updateRoom`, the serialized PUT queue, retry timer, and 404 handling intact. A successful local PUT clears the dirty marker; its broadcast echo is harmless because it is equal to local state.
+5. On SSE error, surface the existing sync status and perform a REST GET fallback. Let native `EventSource` reconnect automatically; if `EventSource` is unavailable, use the existing GET poll logic only as an explicit fallback mode. Clear fallback work when the channel opens and clean up every timer on effect teardown.
 
-- Extend `makeParticipant()` and participant normalization with `instapayShareCode`.
-- Keep a clearly named legacy fallback constant local to `buildInstapayLink()`.
-- Change `buildInstapayLink()` to accept the owner code.
-- Add `buildSplitSummary(room)` using `calculateShares()`.
-- Add the smallest profile/participant update helper only if it avoids duplicating the mapping logic in `App.jsx`; otherwise update the matching participant inline. Do not refactor receipt or settlement code.
+This preserves the current last-write-wins full-room PUT semantics. Conflict resolution, auth, presence, and multi-server fan-out are outside this feature.
 
-### `src/lib/syncApi.js`
+## Data model
 
-Add a URL builder and subscription wrapper that use the exact existing `API_BASE` normalization:
+No SQLite migration is required; room state is stored as a JSON blob and unknown/new fields already survive the existing validation.
 
 ```text
-getRoomEventsUrl(code) -> string
-subscribeToRoom(code, onRoom, onError?) -> () => void
+profile:
+  name: string
+  instapayLink: string                 # existing, may be legacy username data
+  instapayUsername?: string             # legacy input compatibility
+  instapayShareCode?: string            # new, optional; empty/missing is legacy
+  emoji: string
+  id?: string
+
+participant:
+  id, name, instapayLink, emoji, initials, color, isOwner,
+  settlementStatus, settled                  # existing fields
+  instapayShareCode?: string                 # new, copied from profile
+
+room:
+  code, createdAt, participants, receipt, ownerId  # unchanged shape
 ```
 
-The wrapper creates native `EventSource`, listens for `room.updated`, parses the JSON envelope, invokes `onRoom(room)`, and returns an idempotent cleanup function. It should expose connection errors to `App` and not add a dependency or custom transport.
+Friends remain local-only and do not need a new field for this feature; the payment action uses the shared owner's participant. If a friend is added to a room, the existing participant construction defaults the absent code safely.
 
-### `src/App.jsx`
+## Key interfaces and responsibilities
 
-- Add `instapayShareCode` to the welcome form initialization, create profile payload, join profile payload, logout reset, and profile editor.
-- Add a small accessible profile editor toggled from the room header/avatar area. Reuse the existing form/button/emoji styling language; do not introduce a modal library. On save, persist the profile locally and update the matching room participant, then use `updateRoom()` for remote sync. Validate name and profile payment value at the same trust boundary as create; show a non-blocking hint when the code is empty and the legacy fallback will be used.
-- Change the sidebar payment link call to pass the owner participant’s `instapayShareCode`.
-- Add separate summary-copy state from the existing invite-copy state. Copy `buildSplitSummary(room)` with `navigator.clipboard.writeText`, announce success/failure, and keep the action near the invite card/header. It must not include an InstaPay URL.
-- Replace only the room subscription effect: subscribe to SSE when `state.room?.code` exists, perform a REST GET reconciliation on entry, apply pushed rooms to `stateRef`, React state, and localStorage, and close the stream on cleanup/leave.
-- Preserve the dirty-room guard: do not apply incoming events while a local room snapshot is waiting in the existing PUT queue. Clear the guard only after the PUT succeeds. On SSE error, surface the existing sync error and perform a one-shot REST pull; rely on native EventSource reconnect rather than restoring a fixed polling interval.
-- Keep `queueRemoteRoom()`, its serialization, retry behavior, and all create/join/update handlers intact except for the new profile fields and subscription wiring.
+| Location | Interface/change | Responsibility |
+| --- | --- | --- |
+| `src/lib/splitShareStore.js` | `makeParticipant({ instapayShareCode })` and participant normalization | Preserve the new field through room creation, joining, and local reload. |
+| `src/lib/splitShareStore.js` | `buildInstapayLink(value, shareCode)` | Full-link passthrough, configured username-link code, legacy fallback. |
+| `src/lib/splitShareStore.js` | `buildRoomSummary(room)` | Deterministic current-room text using `calculateShares`. |
+| `src/App.jsx` | profile form/editor state and save handler | Persist profile, update active participant, queue room update when needed. |
+| `src/App.jsx` | `handleCopySummary` and `RoomSidebar` prop | Copy summary and announce success without mixing invite state. |
+| `src/lib/syncApi.js` | `subscribeToRoom(code, handlers)` | Native EventSource lifecycle and API-base URL construction. |
+| `server/sync-server.mjs` | `/api/rooms/:code/events` plus subscriber registry | Initial snapshot, room-update broadcasts, heartbeats, cleanup. |
+| `scripts/check-payment.mjs` | link/profile regression assertions | Configured code, legacy fallback, full-link passthrough, persistence. |
+| `scripts/check-math.mjs` | summary assertion | Exact summary text and participant ordering. |
+| `scripts/check-sync.mjs` | SSE integration assertions | Headers, initial event, PUT-triggered event, and unchanged REST behavior. |
 
-### `server/sync-server.mjs`
+## Build phases
 
-- Add stream bookkeeping and a small SSE writer/broadcast helper inside `createSyncServer()`.
-- Route `/api/rooms/:code/events` before the current exact room route.
-- Broadcast from the existing PUT branch after `replaceRoom.run()` succeeds.
-- Preserve POST/GET/PUT validation and JSON response shapes.
+### Phase 1 — Store compatibility and pure domain helpers
 
-### `src/styles.css`
-
-Add only the selectors needed for the profile editor, summary action/status, and any mobile wrapping. Reuse `.friend-form`, `.button`, `.button-quiet`, `.section-kicker`, and existing focus-visible rules where possible. Check desktop and 320–560px layouts; do not alter receipt/editor layout rules unnecessarily.
-
-## Build order
-
-### Phase 1 — Domain contracts and regression assertions
-
-1. Add optional share-code normalization and the two pure helpers in `splitShareStore.js`.
-2. Update `check-payment.mjs` for custom-code username links, full-link passthrough, legacy fallback, and profile/participant persistence.
-3. Add an exact summary assertion to `check-math.mjs` using the existing 332 EGP fixture.
+1. Add the optional share-code field to profile/participant construction and normalization.
+2. Replace the active link-builder call path with the two-argument helper while preserving full-link passthrough and the legacy fallback.
+3. Add the pure room-summary formatter using `calculateShares`.
+4. Extend `check-payment.mjs` and `check-math.mjs` with the smallest assertions for configured codes, legacy data, persistence, and summary text.
 
 Verify: `node scripts/check-payment.mjs` and `node scripts/check-math.mjs`.
 
-### Phase 2 — Profile UI and payment-link wiring
+### Phase 2 — Profile UI and owner payment-link wiring
 
-1. Add the share-code field to the welcome create/join profile state and payloads.
-2. Add the compact room profile editor and save flow, including localStorage and active-room participant update.
-3. Pass the owner participant’s code into `buildInstapayLink()`.
-4. Add the minimal CSS and keyboard/focus labels.
+1. Extend welcome form state with the optional share-code field and include it in create/join profile payloads.
+2. Add the compact active-room profile editor opened from the header avatar; save/cancel must be keyboard accessible and must not alter the room until save.
+3. On save, persist the profile and update the current participant, then use the existing `updateRoom` queue for the shared participant change.
+4. Pass the owner participant's `instapayShareCode` to `buildInstapayLink` in the paid-by-host button.
+5. Add only the necessary CSS, reusing `.form-stack`, `.friend-form`, `.button`, `.button-quiet`, `.section-kicker`, and existing focus rules. Keep the header and editor usable at 320–560px.
 
-Verify: inspect the create, join, edit, and legacy-profile paths at desktop and mobile widths; confirm no receipt/settlement code changed.
+Verify: build and manually check create, join, profile edit, legacy profile reload, owner-code change, pay-host link, keyboard focus, and empty/error states at desktop and phone widths.
 
-### Phase 3 — Copy summary
+### Phase 3 — Copy summary action
 
-1. Add the room-view action beside the invite controls.
-2. Use the pure formatter and current `RoomView` room state; keep invite and summary feedback independent.
+1. Pass the current room summary callback into `RoomSidebar`.
+2. Place `Copy summary` by the invite controls and add distinct copied feedback/live status.
+3. Confirm copied text changes after receipt edits, participant joins, item assignment changes, and fee changes.
 
-Verify: the copied text exactly matches the current participant order and calculated amounts; confirm it contains no URL.
+Verify: summary assertion plus manual clipboard check with and without a receipt; ensure pasted text has no app URL or payment link.
 
-### Phase 4 — SSE server and sync API
+### Phase 4 — SSE server and transport wrapper
 
-1. Add the `/events` route and connection cleanup.
-2. Send initial snapshot, update events, and heartbeat comments.
-3. Broadcast only after successful PUT persistence.
-4. Add `getRoomEventsUrl()` and `subscribeToRoom()` using `VITE_API_BASE` rules.
+1. Add the room subscriber registry and cleanup helpers to `server/sync-server.mjs`.
+2. Add `GET /api/rooms/:code/events`, initial snapshot, heartbeat, and PUT broadcast without changing the SQLite table.
+3. Add `subscribeToRoom` to `src/lib/syncApi.js`, preserving `VITE_API_BASE` and current REST functions.
+4. Update `check-sync.mjs` to connect to a temporary server, assert SSE response headers and the initial event, PUT an updated room, assert the pushed updated event, then close the stream and server.
 
-Verify: `scripts/check-sync.mjs` connects to a temporary server, checks SSE headers and initial event, performs a PUT, reads the pushed updated room event, then aborts/cleans up.
+Verify: `npm run check:sync`.
 
-### Phase 5 — Client subscription replacement
+### Phase 5 — Replace polling and final regression pass
 
-1. Remove the `setInterval` polling effect.
-2. Open/close the SSE subscription with room lifecycle.
-3. Reconcile with REST on entry and on stream errors; apply pushed snapshots through the existing local-first state path.
-4. Confirm local dirty writes cannot be overwritten by an in-flight remote event and that retries still work.
+1. Replace the `setInterval` room effect in `App.jsx` with the SSE lifecycle, REST-on-open reconciliation, dirty-write guard, error status, and explicit REST fallback.
+2. Remove only polling code made obsolete by the healthy SSE path; retain fallback retry logic and existing write retries.
+3. Exercise two browser tabs against one room: participant join, receipt edit, item assignment, payment status, profile code edit, summary copy, temporary sync failure, and room leave.
+4. Run all required checks and inspect the final diff for accidental changes to parser, receipt math, settlement behavior, Vite host binding, or environment URL handling.
 
-Verify: run the sync regression and manually exercise two browser tabs against the same room: participant join, receipt edit, item assignment, payment status, profile code edit, and room leave.
-
-### Phase 6 — Full verification and handoff
-
-Run:
+Verify:
 
 ```text
 node scripts/check-math.mjs
@@ -222,22 +202,21 @@ npm run check:sync
 npm run build
 ```
 
-Also run `node scripts/check-friends.mjs` if friend normalization was touched. Confirm `git diff` contains only the requested feature files/checks and no changes to `vite.config.js`, receipt math, parser behavior, or settlement logic.
-
 ## Risks and mitigations
 
-- **Single-process SSE state:** listeners disappear on restart and do not cross multiple server instances. REST reconciliation and browser reconnect recover local clients; move to a shared broker only when deployment scales beyond one process.
-- **Idle proxy buffering/timeouts:** send comment heartbeats and set SSE cache/buffering headers. Validate through the phone-access setup, not only localhost.
-- **Concurrent full-room PUTs:** SSE does not solve the existing last-write-wins model. Preserve current queue/dirty behavior and do not introduce optimistic merge logic in this feature.
-- **SSE race with local edits:** ignore pushed snapshots while the current local snapshot is dirty; accept the server snapshot after the PUT resolves.
-- **Legacy data:** normalize absent codes to empty strings and retain the old default only for username-to-link conversion. Complete old links continue to bypass the fallback.
-- **Clipboard permissions:** use the native Clipboard API in its supported secure/local contexts and provide an accessible failure status; do not add a clipboard dependency.
-- **Public room data:** SSE exposes the same room payload already available from unauthenticated GET/PUT endpoints. Authentication/authorization is not part of this scope and should be addressed before production-sensitive deployment.
+- **SSE connection leaks:** remove each response on `close`, clear per-connection heartbeat timers, and close subscribers from `close()`.
+- **Stale REST reconciliation:** open SSE before the GET and skip a GET result if a newer event was observed during the request.
+- **Optimistic local overwrite:** retain the current dirty-room guard so a remote event cannot replace an unsent local edit.
+- **Network/server outage:** keep REST GET as the initial/error fallback and preserve the current queued PUT retry behavior and localStorage cache.
+- **Cross-origin phone setup:** construct the SSE URL with the same `VITE_API_BASE` rules and retain permissive CORS headers; do not touch `vite.config.js`.
+- **Legacy payment data:** keep missing share codes empty in storage and use the old code only at username-link construction time.
+- **Concurrent full-room writes:** existing last-write-wins behavior remains a known ceiling; per-field merge/versioning would be a separate sync feature.
+- **Clipboard availability:** keep the existing optional clipboard handling and visible action feedback; copying is a convenience, not a prerequisite for viewing the room.
 
 ## Assumptions and open-questions summary
 
-- “Profile/edit-screen” is assumed to mean a compact editor reachable from the active room header; no existing profile screen was found.
-- The InstaPay code is treated as an opaque, user-entered path segment; it is optional and URL-encoded rather than validated against an undocumented format.
-- Summary format is intentionally limited to room code, participant names, and amounts; no merchant, receipt item detail, payment links, or app URL is added.
-- Native SSE is sufficient for current single-process local SQLite deployment; WebSocket/managed realtime is deferred until scale or bidirectional presence requires it.
-- No blocking questions remain, so `OPEN_QUESTIONS.md` is intentionally not created.
+- SSE is preferred over WebSocket because it is one-way room-state delivery, native in browsers, and available in the existing Node HTTP server without a dependency.
+- The active-room header avatar is the profile/edit entry point because the repository has no profile route or existing edit screen.
+- Share codes are optional, trimmed ASCII alphanumeric values; the exact InstaPay code is not persisted as a default. Missing values retain the existing `23bZwC` behavior.
+- The current room PUT queue and last-write-wins semantics are intentionally preserved; this work does not add authentication, authorization, presence, or cross-process pub/sub.
+- No blocking questions require `OPEN_QUESTIONS.md`.
