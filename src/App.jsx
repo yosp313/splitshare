@@ -48,6 +48,13 @@ function Welcome({ mode, setMode, form, setForm, onCreate, onJoin, error }) {
         <div className="eyebrow"><span className="eyebrow-dot" /> bill splitting, without the group chat math</div>
         <h1>Good food.<br /><em>Fair share.</em></h1>
         <p className="hero-lede">Snap the receipt, invite your people, and leave the awkward arithmetic to us.</p>
+        <div className="story-art" aria-hidden="true">
+          <div className="story-stage story-stage-scan"><span className="story-label">01 / scan</span><div className="story-receipt"><Icon name="receipt" size={31} /><span className="story-scan-line" /></div><span className="story-chip">EGP 480</span></div>
+          <span className="story-arrow"><Icon name="arrow" size={16} /></span>
+          <div className="story-stage story-stage-split"><span className="story-label">02 / split</span><div className="story-people"><span>🙂</span><span>😎</span><span>🤠</span></div><span className="story-chip">3 people</span></div>
+          <span className="story-arrow"><Icon name="arrow" size={16} /></span>
+          <div className="story-stage story-stage-settle"><span className="story-label">03 / settle</span><div className="story-settle-icon"><Icon name="check" size={23} /></div><span className="story-chip">all even</span></div>
+        </div>
         <div className="hero-note"><span className="hero-note-line" /> Built around InstaPay</div>
       </div>
       <div className="entry-card">

@@ -41,6 +41,21 @@ h1, h2, p { margin: 0; }
 h1 em, h2 em { font-family: 'Playfair Display', serif; font-weight: 600; letter-spacing: -.06em; }
 .welcome-copy h1 em { color: var(--coral); }
 .hero-lede { max-width: 370px; margin: 34px 0 30px; color: #605c53; font-size: 16px; line-height: 1.65; }
+.story-art { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: clamp(7px, 1.4vw, 17px); max-width: 540px; margin: 0 0 29px; }
+.story-stage { position: relative; min-width: 0; min-height: 112px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: rgba(251,250,246,.64); box-shadow: 5px 5px 0 rgba(17,17,17,.08); }
+.story-stage-scan { transform: rotate(-2deg); }
+.story-stage-split { transform: translateY(7px) rotate(2deg); }
+.story-stage-settle { transform: rotate(-1deg); }
+.story-label { display: block; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 8px; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
+.story-receipt { position: relative; display: grid; place-items: center; width: 48px; height: 57px; margin: 10px auto 8px; color: var(--ink); background: var(--yellow); border-radius: 5px 5px 10px 5px; box-shadow: 4px 4px 0 var(--ink); transform: rotate(-7deg); overflow: hidden; }
+.story-scan-line { position: absolute; left: 5px; right: 5px; top: 27px; height: 2px; background: var(--coral); }
+.story-people { display: flex; justify-content: center; margin: 11px 0 13px; padding-left: 8px; font-size: 23px; letter-spacing: -10px; }
+.story-people span { position: relative; display: inline-grid; place-items: center; width: 31px; height: 31px; border: 2px solid var(--paper); border-radius: 50%; background: var(--yellow); }
+.story-people span:nth-child(2) { background: var(--paper); }
+.story-people span:nth-child(3) { background: var(--coral); }
+.story-chip { display: block; overflow: hidden; color: var(--muted); font-family: 'DM Mono', monospace; font-size: 8px; letter-spacing: .02em; text-align: center; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.story-settle-icon { display: grid; place-items: center; width: 44px; height: 44px; margin: 14px auto 12px; color: var(--ink); background: var(--yellow); border: 1px solid var(--line); border-radius: 50%; }
+.story-arrow { display: grid; place-items: center; color: var(--coral); }
 .hero-note { display: flex; align-items: center; gap: 12px; color: #6b675e; font-size: 11px; font-weight: 700; }
 .hero-note-line { width: 34px; height: 1px; display: inline-block; background: var(--ink); }
 .entry-card { max-width: 420px; padding: 30px; border: 1px solid var(--line); background: var(--paper); border-radius: 14px; box-shadow: 0 18px 38px rgba(53, 48, 39, .08), 0 3px 8px rgba(53, 48, 39, .04); animation: card-in .7s cubic-bezier(.22, 1, .36, 1) both; }
@@ -229,6 +244,7 @@ h1 em, h2 em { font-family: 'Playfair Display', serif; font-weight: 600; letter-
   .welcome-copy { padding: 0; }
   .welcome-copy h1 { font-size: clamp(61px, 16vw, 98px); }
   .hero-lede { margin-top: 25px; }
+  .story-art { max-width: 560px; }
   .entry-card { width: 100%; max-width: none; }
   .welcome-foot { margin-top: auto; }
   .room-layout { grid-template-columns: 1fr; gap: 44px; padding-top: 35px; }
@@ -240,6 +256,18 @@ h1 em, h2 em { font-family: 'Playfair Display', serif; font-weight: 600; letter-
   .nav-note { display: none; }
   .welcome-grid { padding-top: 43px; }
   .welcome-copy h1 { font-size: clamp(54px, 17vw, 62px); }
+  .story-art { gap: 5px; margin-bottom: 25px; }
+  .story-stage { min-height: 101px; padding: 9px 6px; }
+  .story-label { font-size: 8px; }
+  .story-receipt { width: 40px; height: 49px; margin-top: 9px; }
+  .story-receipt svg { width: 26px; height: 26px; }
+  .story-scan-line { top: 23px; }
+  .story-people { margin: 10px 0 12px; padding-left: 5px; font-size: 17px; letter-spacing: -9px; }
+  .story-people span { width: 26px; height: 26px; }
+  .story-settle-icon { width: 38px; height: 38px; margin: 13px auto 11px; }
+  .story-settle-icon svg { width: 20px; height: 20px; }
+  .story-chip { font-size: 8px; }
+  .story-arrow svg { width: 13px; height: 13px; }
   .entry-card { padding: 22px; box-shadow: 0 16px 32px rgba(53, 48, 39, .10); }
   .form-stack input { font-size: 16px; }
   .welcome-foot .foot-right { display: none; }
