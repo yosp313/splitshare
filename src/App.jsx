@@ -116,7 +116,7 @@ function ReceiptEditor({ room, receipt, receiptImage, isParsing, viewerId, onUpl
 
 }
 
-function RoomSidebar({ room, shares, viewerId, onCopyInvite, copied, onCopySummary, summaryCopied, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, showAddPerson, setShowAddPerson, friends, onSaveFriend, onDeleteFriend, onAddFriendToRoom }) {
+function RoomSidebar({ room, shares, viewerId, onCopyInvite, copied, onCopySummary, summaryCopied, summaryCopyError, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, showAddPerson, setShowAddPerson, friends, onSaveFriend, onDeleteFriend, onAddFriendToRoom }) {
   const [newPerson, setNewPerson] = useState('');
   const [newPersonEmoji, setNewPersonEmoji] = useState(DEFAULT_EMOJIS[1]);
   const owner = room.participants.find((person) => person.id === room.ownerId);
@@ -124,7 +124,7 @@ function RoomSidebar({ room, shares, viewerId, onCopyInvite, copied, onCopySumma
   const viewerSettlementStatus = getSettlementStatus(viewer);
   const ownerInstapayLink = owner?.instapayLink || owner?.instapayUsername;
   return <aside className="room-sidebar" aria-label="Room details">
-    <div className="invite-card"><div className="invite-top"><span className="section-kicker">Room invite</span><span className="live-dot">live</span></div><p>Send this code to your table so everyone can join.</p><button type="button" className={`invite-code ${copied ? 'is-copied' : ''}`} onClick={onCopyInvite} aria-label="Copy invite code"><span>{room.code.slice(0, 3)}</span><strong>{room.code.slice(3)}</strong><Icon name={copied ? 'check' : 'copy'} size={15} /></button><button type="button" className={`share-link ${copied ? 'is-copied' : ''}`} onClick={onCopyInvite} aria-live="polite"><Icon name={copied ? 'check' : 'share'} size={15} /> {copied ? 'Invite code copied' : 'Copy invite code'}</button><button type="button" className={`share-link summary-link ${summaryCopied ? 'is-copied' : ''}`} onClick={onCopySummary} aria-live="polite"><Icon name={summaryCopied ? 'check' : 'copy'} size={15} /> {summaryCopied ? 'Summary copied' : 'Copy summary'}</button></div>
+    <div className="invite-card"><div className="invite-top"><span className="section-kicker">Room invite</span><span className="live-dot">live</span></div><p>Send this code to your table so everyone can join.</p><button type="button" className={`invite-code ${copied ? 'is-copied' : ''}`} onClick={onCopyInvite} aria-label="Copy invite code"><span>{room.code.slice(0, 3)}</span><strong>{room.code.slice(3)}</strong><Icon name={copied ? 'check' : 'copy'} size={15} /></button><button type="button" className={`share-link ${copied ? 'is-copied' : ''}`} onClick={onCopyInvite} aria-live="polite"><Icon name={copied ? 'check' : 'share'} size={15} /> {copied ? 'Invite code copied' : 'Copy invite code'}</button><button type="button" className={`share-link summary-link ${summaryCopied ? 'is-copied' : ''} ${summaryCopyError ? 'is-error' : ''}`} onClick={onCopySummary} aria-live="polite"><Icon name={summaryCopied ? 'check' : summaryCopyError ? 'error' : 'copy'} size={15} /> {summaryCopied ? 'Summary copied' : summaryCopyError ? 'Copy unavailable' : 'Copy summary'}</button></div>
     <div className="people-block"><div className="block-heading"><div><span className="section-kicker">At the table</span><h2>People <span>{room.participants.length}</span></h2></div><button type="button" className="icon-button" onClick={() => setShowAddPerson(!showAddPerson)} aria-label="Add friend" aria-expanded={showAddPerson}><Icon name="plus" size={18} /></button></div>
       {showAddPerson && <div className="add-person-form"><div className="add-person-main"><input autoFocus value={newPerson} onChange={(event) => setNewPerson(event.target.value)} placeholder="Friend's name" onKeyDown={(event) => { if (event.key === 'Enter' && newPerson.trim()) { onAddParticipant(newPerson, newPersonEmoji); setNewPerson(''); setShowAddPerson(false); } }} /><button type="button" onClick={() => { if (newPerson.trim()) { onAddParticipant(newPerson, newPersonEmoji); setNewPerson(''); setShowAddPerson(false); } }} aria-label="Save friend"><Icon name="check" size={16} /></button></div><EmojiPicker compact value={newPersonEmoji} onChange={setNewPersonEmoji} /></div>}
       <div className="people-list">{room.participants.map((person) => { const settlementStatus = getSettlementStatus(person); return <div className="person-row" key={person.id}><Avatar person={person} /><div><strong>{person.id === owner?.id ? 'You' : person.name}{settlementStatus === SETTLEMENT_STATUS.CONFIRMED && <span className="settled-check" title="Payment confirmed" aria-label="Payment confirmed"><Icon name="check" size={12} /></span>}</strong><span>{person.id === owner?.id ? 'Room host' : settlementStatus === SETTLEMENT_STATUS.MARKED_PAID ? 'Paid — waiting for host' : settlementStatus === SETTLEMENT_STATUS.CONFIRMED ? 'Payment confirmed' : 'Friend'}</span></div>{viewerId === room.ownerId && person.id !== room.ownerId && settlementStatus === SETTLEMENT_STATUS.MARKED_PAID && <button type="button" className="confirm-settlement" onClick={() => onConfirmPaid(person.id)}>Confirm payment</button>}{person.id === owner?.id && <span className="host-pill">host</span>}</div>; })}</div>
@@ -158,7 +158,7 @@ function FriendsPanel({ friends, room, onSave, onDelete, onAddToRoom }) {
   </section>;
 }
 
-function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, isParsing, receiptImage, onItemChange, onFeeChange, onAddItem, onToggleAssignment, onCopyInvite, copied, onCopySummary, summaryCopied, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, onSaveFriend, onDeleteFriend, onAddFriendToRoom, onSaveProfile, syncError }) {
+function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, isParsing, receiptImage, onItemChange, onFeeChange, onAddItem, onToggleAssignment, onCopyInvite, copied, onCopySummary, summaryCopied, summaryCopyError, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, onSaveFriend, onDeleteFriend, onAddFriendToRoom, onSaveProfile, syncError }) {
   const { room, profile } = state;
   const [showAddPerson, setShowAddPerson] = useState(false);
   const [profileForm, setProfileForm] = useState(null);
@@ -194,6 +194,7 @@ export default function App() {
   const [isParsing, setIsParsing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [summaryCopied, setSummaryCopied] = useState(false);
+  const [summaryCopyError, setSummaryCopyError] = useState(false);
   const [syncError, setSyncError] = useState('');
   const stateRef = useRef(state);
   const syncQueueRef = useRef(Promise.resolve());
@@ -254,7 +255,7 @@ export default function App() {
         onError: () => {
           if (!active) return;
           setSyncError('Sync server unavailable.');
-          pullRoom();
+          startFallback();
         },
       });
     } catch {
@@ -382,8 +383,18 @@ export default function App() {
   const handleMarkPaid = (participantId) => updateRoom((room) => markParticipantPaid(room, participantId));
   const handleResetPaid = (participantId) => updateRoom((room) => resetParticipantPaid(room, participantId));
   const handleConfirmPaid = (participantId) => { if (stateRef.current.room?.ownerId !== stateRef.current.profile?.id) return; updateRoom((room) => confirmParticipantPaid(room, participantId)); };
-  const handleCopyInvite = async () => { try { if (!navigator.clipboard) return; await navigator.clipboard.writeText(state.room.code); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { /* clipboard is optional in local previews */ } };
-  const handleCopySummary = async () => { try { if (!navigator.clipboard) return; await navigator.clipboard.writeText(buildRoomSummary(stateRef.current.room)); setSummaryCopied(true); setTimeout(() => setSummaryCopied(false), 1800); } catch { /* clipboard is optional in local previews */ } };
+  const handleCopySummary = async () => {
+    setSummaryCopyError(false);
+    try {
+      if (!navigator.clipboard) return;
+      await navigator.clipboard.writeText(buildRoomSummary(stateRef.current.room));
+      setSummaryCopied(true);
+      setTimeout(() => setSummaryCopied(false), 1800);
+    } catch {
+      setSummaryCopyError(true);
+      setTimeout(() => setSummaryCopyError(false), 3000);
+    }
+  };
   const handleAddParticipant = (name, emoji) => updateRoom((room) => joinRoom(room, { name, instapayLink: '', emoji }));
   const handleSaveFriend = (friend, friendId) => updateFriends(friendId ? updateFriend(stateRef.current.friends, friendId, friend) : [...stateRef.current.friends, createFriend(friend)]);
   const handleDeleteFriend = (friendId) => updateFriends(removeFriend(stateRef.current.friends, friendId));
@@ -398,8 +409,8 @@ export default function App() {
     if (!participant) return;
     updateRoom((room) => ({ ...room, participants: room.participants.map((person) => person.id === participant.id ? { ...person, name: profile.name, instapayShareCode: profile.instapayShareCode, emoji: profile.emoji, initials: profile.name.split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase() } : person) }));
   };
-  const handleLogout = () => { const cleared = { ...stateRef.current, room: null }; dirtyRoomRef.current = null; if (syncRetryRef.current) clearTimeout(syncRetryRef.current); syncRetryRef.current = null; stateRef.current = cleared; saveStoredState(cleared); setState(cleared); setSyncError(''); setReceiptImage(''); setPendingFile(null); setCopied(false); setSummaryCopied(false); setForm({ name: cleared.profile?.name || '', instapayLink: cleared.profile?.instapayLink || '', instapayShareCode: cleared.profile?.instapayShareCode || '', code: '', emoji: cleared.profile?.emoji || DEFAULT_EMOJIS[0] }); };
+  const handleLogout = () => { const cleared = { ...stateRef.current, room: null }; dirtyRoomRef.current = null; if (syncRetryRef.current) clearTimeout(syncRetryRef.current); syncRetryRef.current = null; stateRef.current = cleared; saveStoredState(cleared); setState(cleared); setSyncError(''); setReceiptImage(''); setPendingFile(null); setCopied(false); setSummaryCopied(false); setSummaryCopyError(false); setForm({ name: cleared.profile?.name || '', instapayLink: cleared.profile?.instapayLink || '', instapayShareCode: cleared.profile?.instapayShareCode || '', code: '', emoji: cleared.profile?.emoji || DEFAULT_EMOJIS[0] }); };
 
   if (!state.profile || !state.room) return <Welcome mode={mode} setMode={(nextMode) => { setMode(nextMode); setError(''); }} form={form} setForm={setForm} onCreate={handleCreate} onJoin={handleJoin} error={error} />;
-  return <RoomView state={state} onLogout={handleLogout} onUpload={handleUpload} onAnalyze={handleAnalyze} onManualReceipt={handleManualReceipt} isParsing={isParsing} receiptImage={receiptImage} onItemChange={handleItemChange} onFeeChange={handleFeeChange} onAddItem={handleAddItem} onToggleAssignment={handleToggleAssignment} onCopyInvite={handleCopyInvite} copied={copied} onCopySummary={handleCopySummary} summaryCopied={summaryCopied} onAddParticipant={handleAddParticipant} onMarkPaid={handleMarkPaid} onResetPaid={handleResetPaid} onConfirmPaid={handleConfirmPaid} onSaveFriend={handleSaveFriend} onDeleteFriend={handleDeleteFriend} onAddFriendToRoom={handleAddFriendToRoom} onSaveProfile={handleSaveProfile} syncError={syncError} />;
+  return <RoomView state={state} onLogout={handleLogout} onUpload={handleUpload} onAnalyze={handleAnalyze} onManualReceipt={handleManualReceipt} isParsing={isParsing} receiptImage={receiptImage} onItemChange={handleItemChange} onFeeChange={handleFeeChange} onAddItem={handleAddItem} onToggleAssignment={handleToggleAssignment} onCopyInvite={handleCopyInvite} copied={copied} onCopySummary={handleCopySummary} summaryCopied={summaryCopied} summaryCopyError={summaryCopyError} onAddParticipant={handleAddParticipant} onMarkPaid={handleMarkPaid} onResetPaid={handleResetPaid} onConfirmPaid={handleConfirmPaid} onSaveFriend={handleSaveFriend} onDeleteFriend={handleDeleteFriend} onAddFriendToRoom={handleAddFriendToRoom} onSaveProfile={handleSaveProfile} syncError={syncError} />;
 }
