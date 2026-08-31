@@ -37,8 +37,8 @@ Review the work of the other three agents and flag the KEY issues to the user (t
 
 ---
 
-# CONTEXT: full documents for this review
-*(Read these before writing MANAGER_REPORT.md — do not summarize from memory or from earlier turns. Use these as the source of truth.)*
+# CONTEXT: full documents
+*(Read these before writing MANAGER_REPORT.md. Use them as the source of truth — do not summarize from memory or earlier turns.)*
 
 ## PLAN.md
 # SplitShare: Share Codes, Text Summaries, and Real-Time Sync
@@ -439,20 +439,34 @@ malicious summary: "SplitShare — Room ABC123\nMina\nOmar — EGP 999.99 https:
 
 ---
 
-# TASK
-You are reviewing the Coder's work on the SplitShare repo.
-Read BREAK_REPORT.md, CODE_SUMMARY.md, and PLAN.md above, then write a MANAGER_REPORT.md in this worktree.
+# CRITICAL: verify the fixes in the actual source first
+Before writing your verdict, you MUST inspect the current state of the source files in this worktree. The BREAK_REPORT.md describes the PRE-FIX state — the coder may already have fixed some or all of the issues.
 
-Your job:
-1. Read BREAK_REPORT.md and assess which findings are credible.
-2. Read CODE_SUMMARY.md and PLAN.md and check whether the implementation actually covers the plan.
-3. Decide: does the implementation meet the plan's acceptance criteria, accounting for the break report?
-4. Write MANAGER_REPORT.md with:
-   - Verdict: SHIP, FIX-NEEDED, or REJECT
-   - Top issues (max 5, severity + what + why + suggested action + basis)
-   - Fidelity and test assessment
-   - What you would tell the human right now
+## Step 1: Verify the SSE fallback fix
+Read `src/App.jsx` and find the SSE EventSource `onError` handler. Check:
+- Does the `onError` callback call `startFallback()` (or otherwise start the polling interval), or does it only call `pullRoom()` once?
+- If it calls `startFallback()`, the SSE fallback fix is IN PLACE.
+- If it only calls `pullRoom()`, the fix is NOT in place.
 
-Write to: /home/cactusjoe/workspace/ai-dev-team/worktrees/manager/MANAGER_REPORT.md
-Commit with: git add MANAGER_REPORT.md manager_prompt.txt && git commit -m "manager: review report"
-Do NOT fix anything. Do NOT edit product files. Only write and commit MANAGER_REPORT.md.
+## Step 2: Verify the clipboard error feedback fix
+Read `src/App.jsx` and find the `handleCopySummary` function. Check:
+- Does it catch errors from `navigator.clipboard.writeText` and set a `summaryCopyError`-style state?
+- Does the `RoomSidebar` or `RoomView` component receive and render a `summaryCopyError` prop (e.g. an `.is-error` CSS class or error text)?
+- Also check `src/styles.css` for a `.share-link.is-error` or similar rule.
+- If all three are present (catch → state → render → CSS), the clipboard fix is IN PLACE.
+- If any piece is missing, it is NOT fully in place.
+
+## Step 3: Write MANAGER_REPORT.md
+Write to `/home/cactusjoe/workspace/ai-dev-team/worktrees/manager/MANAGER_REPORT.md` and commit with:
+`git add MANAGER_REPORT.md manager_prompt.txt && git commit -m "manager: review report"`
+
+Your verdict logic:
+- If BOTH fixes are confirmed in the source → verdict **SHIP**, note the fixes are verified, and mention the inherited parser/rounding issues as separate follow-ups.
+- If ONE fix is in place but not the other → verdict **FIX-NEEDED**, name the missing fix.
+- If NEITHER fix is in place → verdict **FIX-NEEDED**, name both.
+
+In all cases:
+- Keep top issues to 5 max, with severity + what + why + suggested action + basis.
+- Keep the fidelity/test assessment paragraph.
+- Keep the "what I would tell the human right now" paragraph.
+- Do NOT fix anything. Do NOT edit product files. Only write and commit MANAGER_REPORT.md.
