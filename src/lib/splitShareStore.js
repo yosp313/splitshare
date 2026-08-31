@@ -1,6 +1,5 @@
 const STORAGE_KEY = 'splitshare-state-v1';
-// ponytail: fixed demo share code; capture each host's InstaPay share code when per-account links matter.
-const INSTAPAY_SHARE_CODE = '23bZwC';
+const LEGACY_INSTAPAY_SHARE_CODE = '23bZwC';
 
 export const DEFAULT_COLORS = ['#e27a55', '#6d7fce', '#8b9b66', '#b875b1', '#d39b46'];
 export const DEFAULT_EMOJIS = ['🍕', '🍣', '🌮', '🍜', '🥑', '🧋', '🐱', '🦊', '✨', '🍩'];
@@ -10,11 +9,12 @@ export function generateRoomCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
-export function makeParticipant({ name, instapayLink = '', instapayUsername = '', emoji = '', isOwner = false, index = 0 }) {
+export function makeParticipant({ name, instapayLink = '', instapayUsername = '', instapayShareCode = '', emoji = '', isOwner = false, index = 0 }) {
   return {
     id: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}-${index}`,
     name: name.trim(),
     instapayLink: (instapayLink || instapayUsername).trim(),
+    instapayShareCode: String(instapayShareCode || '').trim(),
     initials: name.trim().split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase(),
     emoji: emoji || DEFAULT_EMOJIS[index % DEFAULT_EMOJIS.length],
     color: isOwner ? '#111111' : DEFAULT_COLORS[index % DEFAULT_COLORS.length],
@@ -71,7 +71,11 @@ export function joinRoom(room, profile) {
 export function getStoredState() {
   try {
     const state = { profile: null, room: null, friends: [], ...(JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}) };
-    if (state.profile && !state.profile.instapayLink && state.profile.instapayUsername) state.profile = { ...state.profile, instapayLink: state.profile.instapayUsername };
+    if (state.profile) state.profile = {
+      ...state.profile,
+      ...(state.profile.instapayLink ? {} : state.profile.instapayUsername ? { instapayLink: state.profile.instapayUsername } : {}),
+      instapayShareCode: String(state.profile.instapayShareCode || '').trim(),
+    };
     if (state.room?.participants) state.room = { ...state.room, participants: state.room.participants.map(normalizeParticipant) };
     state.friends = Array.isArray(state.friends) ? state.friends.map(normalizeFriend).filter((friend) => friend.name) : [];
     return state;
@@ -93,6 +97,10 @@ export function isValidInstapayLink(value) {
   }
 }
 
+export function isValidInstapayShareCode(value) {
+  return !String(value || '').trim() || /^[A-Za-z0-9]{1,32}$/.test(String(value).trim());
+}
+
 export function getSettlementStatus(person) {
   return Object.values(SETTLEMENT_STATUS).includes(person?.settlementStatus)
     ? person.settlementStatus
@@ -104,6 +112,7 @@ function normalizeParticipant(person) {
   return {
     ...person,
     instapayLink: person.instapayLink || person.instapayUsername || '',
+    instapayShareCode: String(person.instapayShareCode || '').trim(),
     settlementStatus,
     settled: settlementStatus === SETTLEMENT_STATUS.CONFIRMED,
   };
@@ -136,9 +145,13 @@ export function markParticipantSettled(room, participantId) {
   return confirmParticipantPaid(room, participantId);
 }
 
-export function buildInstapayLink(linkOrUsername) {
-  const value = linkOrUsername.trim();
-  return value.startsWith('https://ipn.eg/') ? value : `https://ipn.eg/S/${encodeURIComponent(value)}/instapay/${INSTAPAY_SHARE_CODE}`;
+export function buildInstapayLink(linkOrUsername, instapayShareCode = '') {
+  const value = String(linkOrUsername || '').trim();
+  if (value.startsWith('https://ipn.eg/')) return value;
+  const shareCode = isValidInstapayShareCode(instapayShareCode) && String(instapayShareCode).trim()
+    ? String(instapayShareCode).trim()
+    : LEGACY_INSTAPAY_SHARE_CODE;
+  return `https://ipn.eg/S/${encodeURIComponent(value)}/instapay/${shareCode}`;
 }
 
 export function calculateReceiptTotal(receipt) {
@@ -168,4 +181,10 @@ export function calculateShares(receipt, participantIds) {
     shares[id].items = roundMoney(shares[id].items);
   });
   return shares;
+}
+
+export function buildRoomSummary(room) {
+  const participants = room?.participants || [];
+  const shares = calculateShares(room?.receipt, participants.map((person) => person.id));
+  return [`SplitShare — Room ${room?.code || ''}`, ...participants.map((person) => `${person.name} — EGP ${Number(shares[person.id]?.amount || 0).toFixed(2)}`)].join('\n');
 }

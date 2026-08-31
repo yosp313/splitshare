@@ -67,6 +67,24 @@ export function createSyncServer({ dbPath = join(process.cwd(), 'data', 'splitsh
   const insertRoom = db.prepare('INSERT INTO rooms (code, state, updated_at) VALUES (?, ?, ?)');
   const findRoom = db.prepare('SELECT state FROM rooms WHERE code = ?');
   const replaceRoom = db.prepare('UPDATE rooms SET state = ?, updated_at = ? WHERE code = ?');
+  const subscribers = new Map();
+
+  const removeSubscriber = (code, response, heartbeat) => {
+    clearInterval(heartbeat);
+    const roomSubscribers = subscribers.get(code);
+    roomSubscribers?.delete(response);
+    if (roomSubscribers?.size === 0) subscribers.delete(code);
+  };
+
+  const broadcastRoom = (room) => {
+    for (const response of subscribers.get(room.code) || []) {
+      try {
+        response.write(`event: room\ndata: ${JSON.stringify({ room })}\n\n`);
+      } catch {
+        response.destroy();
+      }
+    }
+  };
 
   const server = createServer(async (request, response) => {
     response.setHeader('access-control-allow-origin', '*');
@@ -75,10 +93,32 @@ export function createSyncServer({ dbPath = join(process.cwd(), 'data', 'splitsh
     if (request.method === 'OPTIONS') return response.writeHead(204).end();
 
     const url = new URL(request.url, 'http://localhost');
+    const eventsMatch = url.pathname.match(/^\/api\/rooms\/([A-Z0-9]{6})\/events$/);
     const match = url.pathname.match(/^\/api\/rooms(?:\/([A-Z0-9]{6}))?$/);
-    if (!match) return sendJson(response, 404, { error: 'Not found.' });
+    if (!match && !eventsMatch) return sendJson(response, 404, { error: 'Not found.' });
 
     try {
+      if (request.method === 'GET' && eventsMatch) {
+        const row = findRoom.get(eventsMatch[1]);
+        if (!row) return sendJson(response, 404, { error: 'Room not found.' });
+        const room = JSON.parse(row.state);
+        response.writeHead(200, {
+          'cache-control': 'no-cache, no-transform',
+          'connection': 'keep-alive',
+          'content-type': 'text/event-stream; charset=utf-8',
+          'x-accel-buffering': 'no',
+        });
+        response.write(': connected\n\n');
+        response.write(`event: room\ndata: ${JSON.stringify({ room })}\n\n`);
+        const roomSubscribers = subscribers.get(eventsMatch[1]) || new Set();
+        subscribers.set(eventsMatch[1], roomSubscribers);
+        roomSubscribers.add(response);
+        const heartbeat = setInterval(() => response.write(': heartbeat\n\n'), 25000);
+        response.on('close', () => removeSubscriber(eventsMatch[1], response, heartbeat));
+        return;
+      }
+      if (eventsMatch) return sendJson(response, 405, { error: 'Method not allowed.' });
+
       if (request.method === 'POST' && !match[1]) {
         const room = parseRoomBody(await readBody(request));
         try {
@@ -101,6 +141,7 @@ export function createSyncServer({ dbPath = join(process.cwd(), 'data', 'splitsh
         if (room.code !== match[1]) throw new HttpError(400, 'Room code does not match the URL.');
         const result = replaceRoom.run(JSON.stringify(room), Date.now(), match[1]);
         if (!result.changes) return sendJson(response, 404, { error: 'Room not found.' });
+        broadcastRoom(room);
         return sendJson(response, 200, { room });
       }
 
@@ -111,7 +152,14 @@ export function createSyncServer({ dbPath = join(process.cwd(), 'data', 'splitsh
     }
   });
 
-  return { server, close: () => { server.close(); db.close(); } };
+  return { server, close: () => {
+    for (const [code, roomSubscribers] of subscribers) {
+      for (const response of roomSubscribers) response.end();
+      subscribers.delete(code);
+    }
+    server.close();
+    db.close();
+  } };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createWorker } from 'tesseract.js';
-import { buildInstapayLink, calculateReceiptTotal, calculateShares, confirmParticipantPaid, createFriend, createRoom, DEFAULT_EMOJIS, getSettlementStatus, getStoredState, isValidInstapayLink, joinRoom, markParticipantPaid, removeFriend, resetParticipantPaid, saveStoredState, SETTLEMENT_STATUS, updateFriend } from './lib/splitShareStore';
+import { buildInstapayLink, buildRoomSummary, calculateReceiptTotal, calculateShares, confirmParticipantPaid, createFriend, createRoom, DEFAULT_EMOJIS, getSettlementStatus, getStoredState, isValidInstapayLink, isValidInstapayShareCode, joinRoom, markParticipantPaid, removeFriend, resetParticipantPaid, saveStoredState, SETTLEMENT_STATUS, updateFriend } from './lib/splitShareStore';
 import { parseReceiptText } from './lib/receiptParser';
-import { createRemoteRoom, getRemoteRoom, updateRemoteRoom } from './lib/syncApi';
+import { createRemoteRoom, getRemoteRoom, subscribeToRoom, updateRemoteRoom } from './lib/syncApi';
 
 const money = (value) => `EGP ${Number(value || 0).toFixed(2)}`;
 
@@ -74,6 +74,7 @@ function Welcome({ mode, setMode, form, setForm, onCreate, onJoin, error }) {
           <div className="emoji-field"><span className="field-label">Profile picture</span><EmojiPicker value={form.emoji} onChange={(emoji) => setForm({ ...form, emoji })} /></div>
           {mode === 'create' && <label>What should we call you<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Mina" /></label>}
           {mode === 'create' && <label>InstaPay shareable link<input value={form.instapayLink} onChange={(event) => setForm({ ...form, instapayLink: event.target.value.trim().slice(0, 200) })} placeholder="https://ipn.eg/S/..." autoCapitalize="none" autoCorrect="off" /></label>}
+          <label>InstaPay share code <span className="field-hint">optional</span><input value={form.instapayShareCode} onChange={(event) => setForm({ ...form, instapayShareCode: event.target.value.slice(0, 32) })} placeholder="e.g. 23bZwC" maxLength={32} autoCapitalize="none" autoCorrect="off" /></label>
           {mode === 'join' && <label>Your name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Omar" /></label>}
           {mode === 'join' && <label>Room code<input className="code-input" value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value.toUpperCase().slice(0, 6) })} placeholder="A8K2QF" maxLength={6} /></label>}
         </div>
@@ -115,7 +116,7 @@ function ReceiptEditor({ room, receipt, receiptImage, isParsing, viewerId, onUpl
 
 }
 
-function RoomSidebar({ room, shares, viewerId, onCopyInvite, copied, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, showAddPerson, setShowAddPerson, friends, onSaveFriend, onDeleteFriend, onAddFriendToRoom }) {
+function RoomSidebar({ room, shares, viewerId, onCopyInvite, copied, onCopySummary, summaryCopied, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, showAddPerson, setShowAddPerson, friends, onSaveFriend, onDeleteFriend, onAddFriendToRoom }) {
   const [newPerson, setNewPerson] = useState('');
   const [newPersonEmoji, setNewPersonEmoji] = useState(DEFAULT_EMOJIS[1]);
   const owner = room.participants.find((person) => person.id === room.ownerId);
@@ -123,12 +124,12 @@ function RoomSidebar({ room, shares, viewerId, onCopyInvite, copied, onAddPartic
   const viewerSettlementStatus = getSettlementStatus(viewer);
   const ownerInstapayLink = owner?.instapayLink || owner?.instapayUsername;
   return <aside className="room-sidebar" aria-label="Room details">
-    <div className="invite-card"><div className="invite-top"><span className="section-kicker">Room invite</span><span className="live-dot">live</span></div><p>Send this code to your table so everyone can join.</p><button type="button" className={`invite-code ${copied ? 'is-copied' : ''}`} onClick={onCopyInvite} aria-label="Copy invite code"><span>{room.code.slice(0, 3)}</span><strong>{room.code.slice(3)}</strong><Icon name={copied ? 'check' : 'copy'} size={15} /></button><button type="button" className={`share-link ${copied ? 'is-copied' : ''}`} onClick={onCopyInvite} aria-live="polite"><Icon name={copied ? 'check' : 'share'} size={15} /> {copied ? 'Invite code copied' : 'Copy invite code'}</button></div>
+    <div className="invite-card"><div className="invite-top"><span className="section-kicker">Room invite</span><span className="live-dot">live</span></div><p>Send this code to your table so everyone can join.</p><button type="button" className={`invite-code ${copied ? 'is-copied' : ''}`} onClick={onCopyInvite} aria-label="Copy invite code"><span>{room.code.slice(0, 3)}</span><strong>{room.code.slice(3)}</strong><Icon name={copied ? 'check' : 'copy'} size={15} /></button><button type="button" className={`share-link ${copied ? 'is-copied' : ''}`} onClick={onCopyInvite} aria-live="polite"><Icon name={copied ? 'check' : 'share'} size={15} /> {copied ? 'Invite code copied' : 'Copy invite code'}</button><button type="button" className={`share-link summary-link ${summaryCopied ? 'is-copied' : ''}`} onClick={onCopySummary} aria-live="polite"><Icon name={summaryCopied ? 'check' : 'copy'} size={15} /> {summaryCopied ? 'Summary copied' : 'Copy summary'}</button></div>
     <div className="people-block"><div className="block-heading"><div><span className="section-kicker">At the table</span><h2>People <span>{room.participants.length}</span></h2></div><button type="button" className="icon-button" onClick={() => setShowAddPerson(!showAddPerson)} aria-label="Add friend" aria-expanded={showAddPerson}><Icon name="plus" size={18} /></button></div>
       {showAddPerson && <div className="add-person-form"><div className="add-person-main"><input autoFocus value={newPerson} onChange={(event) => setNewPerson(event.target.value)} placeholder="Friend's name" onKeyDown={(event) => { if (event.key === 'Enter' && newPerson.trim()) { onAddParticipant(newPerson, newPersonEmoji); setNewPerson(''); setShowAddPerson(false); } }} /><button type="button" onClick={() => { if (newPerson.trim()) { onAddParticipant(newPerson, newPersonEmoji); setNewPerson(''); setShowAddPerson(false); } }} aria-label="Save friend"><Icon name="check" size={16} /></button></div><EmojiPicker compact value={newPersonEmoji} onChange={setNewPersonEmoji} /></div>}
       <div className="people-list">{room.participants.map((person) => { const settlementStatus = getSettlementStatus(person); return <div className="person-row" key={person.id}><Avatar person={person} /><div><strong>{person.id === owner?.id ? 'You' : person.name}{settlementStatus === SETTLEMENT_STATUS.CONFIRMED && <span className="settled-check" title="Payment confirmed" aria-label="Payment confirmed"><Icon name="check" size={12} /></span>}</strong><span>{person.id === owner?.id ? 'Room host' : settlementStatus === SETTLEMENT_STATUS.MARKED_PAID ? 'Paid — waiting for host' : settlementStatus === SETTLEMENT_STATUS.CONFIRMED ? 'Payment confirmed' : 'Friend'}</span></div>{viewerId === room.ownerId && person.id !== room.ownerId && settlementStatus === SETTLEMENT_STATUS.MARKED_PAID && <button type="button" className="confirm-settlement" onClick={() => onConfirmPaid(person.id)}>Confirm payment</button>}{person.id === owner?.id && <span className="host-pill">host</span>}</div>; })}</div>
     </div>
-    {room.receipt && <div className="you-owe"><div className="owe-heading"><span className="section-kicker">Your total</span><Icon name="spark" size={18} /></div><strong>{money(shares[viewerId]?.amount)}</strong><span>includes your share of tax & service</span><div className="owe-rule" /><div className="owe-breakdown"><span>Items <b>{money(shares[viewerId]?.items)}</b></span><span>Tax + service <b>{money((shares[viewerId]?.taxShare || 0) + (shares[viewerId]?.serviceShare || 0))}</b></span></div>{viewer?.id !== room.ownerId && viewerSettlementStatus === SETTLEMENT_STATUS.UNPAID && ownerInstapayLink && <a className="button button-dark button-full pay-host" href={buildInstapayLink(ownerInstapayLink)} target="_blank" rel="noreferrer"><Icon name="arrow" size={16} /> Pay the host</a>}{viewer?.id !== room.ownerId && viewerSettlementStatus === SETTLEMENT_STATUS.UNPAID && <button className="button button-yellow button-full settle-button" onClick={onMarkPaid}><Icon name="check" size={16} /> I've paid</button>}{viewer?.id !== room.ownerId && viewerSettlementStatus === SETTLEMENT_STATUS.MARKED_PAID && <><span className="settlement-note">Payment marked. Waiting for the host to confirm.</span><button className="button button-quiet button-full settle-button" onClick={onResetPaid}>Undo paid</button></>}{viewer?.id !== room.ownerId && viewerSettlementStatus === SETTLEMENT_STATUS.CONFIRMED && <span className="settlement-note settlement-confirmed">Payment confirmed by the host.</span>}</div>}
+      {room.receipt && <div className="you-owe"><div className="owe-heading"><span className="section-kicker">Your total</span><Icon name="spark" size={18} /></div><strong>{money(shares[viewerId]?.amount)}</strong><span>includes your share of tax & service</span><div className="owe-rule" /><div className="owe-breakdown"><span>Items <b>{money(shares[viewerId]?.items)}</b></span><span>Tax + service <b>{money((shares[viewerId]?.taxShare || 0) + (shares[viewerId]?.serviceShare || 0))}</b></span></div>{viewer?.id !== room.ownerId && viewerSettlementStatus === SETTLEMENT_STATUS.UNPAID && ownerInstapayLink && <a className="button button-dark button-full pay-host" href={buildInstapayLink(ownerInstapayLink, owner?.instapayShareCode)} target="_blank" rel="noreferrer"><Icon name="arrow" size={16} /> Pay the host</a>}{viewer?.id !== room.ownerId && viewerSettlementStatus === SETTLEMENT_STATUS.UNPAID && <button className="button button-yellow button-full settle-button" onClick={onMarkPaid}><Icon name="check" size={16} /> I've paid</button>}{viewer?.id !== room.ownerId && viewerSettlementStatus === SETTLEMENT_STATUS.MARKED_PAID && <><span className="settlement-note">Payment marked. Waiting for the host to confirm.</span><button className="button button-quiet button-full settle-button" onClick={onResetPaid}>Undo paid</button></>}{viewer?.id !== room.ownerId && viewerSettlementStatus === SETTLEMENT_STATUS.CONFIRMED && <span className="settlement-note settlement-confirmed">Payment confirmed by the host.</span>}</div>}
     <FriendsPanel friends={friends} room={room} onSave={onSaveFriend} onDelete={onDeleteFriend} onAddToRoom={onAddFriendToRoom} />
   </aside>;
 }
@@ -157,16 +158,28 @@ function FriendsPanel({ friends, room, onSave, onDelete, onAddToRoom }) {
   </section>;
 }
 
-function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, isParsing, receiptImage, onItemChange, onFeeChange, onAddItem, onToggleAssignment, onCopyInvite, copied, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, onSaveFriend, onDeleteFriend, onAddFriendToRoom, syncError }) {
+function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, isParsing, receiptImage, onItemChange, onFeeChange, onAddItem, onToggleAssignment, onCopyInvite, copied, onCopySummary, summaryCopied, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, onSaveFriend, onDeleteFriend, onAddFriendToRoom, onSaveProfile, syncError }) {
   const { room, profile } = state;
   const [showAddPerson, setShowAddPerson] = useState(false);
+  const [profileForm, setProfileForm] = useState(null);
+  const [profileError, setProfileError] = useState('');
   const shares = useMemo(() => calculateShares(room.receipt, room.participants.map((person) => person.id)), [room.receipt, room.participants]);
   const viewer = room.participants.find((person) => person.id === profile.id) || room.participants.find((person) => person.name === profile.name) || room.participants[0];
+  const openProfile = () => { setProfileForm({ name: profile.name, instapayShareCode: profile.instapayShareCode || '', emoji: profile.emoji || DEFAULT_EMOJIS[0] }); setProfileError(''); };
+  const saveProfile = () => {
+    const name = profileForm.name.trim();
+    const instapayShareCode = profileForm.instapayShareCode.trim();
+    if (!name) return setProfileError('Add your name to continue.');
+    if (!isValidInstapayShareCode(instapayShareCode)) return setProfileError('Use 1–32 letters or numbers for the share code.');
+    onSaveProfile({ name, instapayShareCode, emoji: profileForm.emoji });
+    setProfileForm(null);
+  };
   return <main className="room-page">
 
-    <header className="app-header"><Brand /><div className="header-room"><span className="status-dot" /> Room <strong>{room.code}</strong>{syncError && <span className="sync-error" role="status">{syncError}</span>}</div><div className="header-actions"><button className="header-link" onClick={onLogout}>Leave room</button><Avatar person={viewer} small /></div></header>
+    <header className="app-header"><Brand /><div className="header-room"><span className="status-dot" /> Room <strong>{room.code}</strong>{syncError && <span className="sync-error" role="status">{syncError}</span>}</div><div className="header-actions"><button className="header-link" onClick={onLogout}>Leave room</button><button type="button" className="avatar-button" onClick={openProfile} aria-label="Edit profile" aria-expanded={Boolean(profileForm)}><Avatar person={viewer} small /></button></div></header>
+    {profileForm && <form className="profile-editor friend-form" onSubmit={(event) => { event.preventDefault(); saveProfile(); }} aria-label="Edit profile"><label>Name<input autoFocus value={profileForm.name} onChange={(event) => { setProfileForm({ ...profileForm, name: event.target.value }); setProfileError(''); }} /></label><label>InstaPay share code <span className="field-hint">optional</span><input value={profileForm.instapayShareCode} onChange={(event) => { setProfileForm({ ...profileForm, instapayShareCode: event.target.value.slice(0, 32) }); setProfileError(''); }} placeholder="e.g. 23bZwC" maxLength={32} autoCapitalize="none" autoCorrect="off" aria-describedby={profileError ? 'profile-form-error' : undefined} aria-invalid={Boolean(profileError)} /></label>{profileError && <p id="profile-form-error" className="form-error" role="alert">{profileError}</p>}<div className="friend-form-actions"><button type="submit" className="button button-dark">Save profile</button><button type="button" className="button button-quiet" onClick={() => setProfileForm(null)}>Cancel</button></div></form>}
 
-    <div className="room-layout"><ReceiptEditor room={room} receipt={room.receipt} receiptImage={receiptImage} isParsing={isParsing} viewerId={viewer.id} onUpload={onUpload} onAnalyze={onAnalyze} onManualReceipt={onManualReceipt} onItemChange={onItemChange} onFeeChange={onFeeChange} onAddItem={onAddItem} onToggleAssignment={onToggleAssignment} /><RoomSidebar room={room} shares={shares} viewerId={viewer.id} onCopyInvite={onCopyInvite} copied={copied} onAddParticipant={onAddParticipant} onMarkPaid={() => onMarkPaid(viewer.id)} onResetPaid={() => onResetPaid(viewer.id)} onConfirmPaid={onConfirmPaid} showAddPerson={showAddPerson} setShowAddPerson={setShowAddPerson} friends={state.friends} onSaveFriend={onSaveFriend} onDeleteFriend={onDeleteFriend} onAddFriendToRoom={onAddFriendToRoom} /></div>
+    <div className="room-layout"><ReceiptEditor room={room} receipt={room.receipt} receiptImage={receiptImage} isParsing={isParsing} viewerId={viewer.id} onUpload={onUpload} onAnalyze={onAnalyze} onManualReceipt={onManualReceipt} onItemChange={onItemChange} onFeeChange={onFeeChange} onAddItem={onAddItem} onToggleAssignment={onToggleAssignment} /><RoomSidebar room={room} shares={shares} viewerId={viewer.id} onCopyInvite={onCopyInvite} copied={copied} onCopySummary={onCopySummary} summaryCopied={summaryCopied} onAddParticipant={onAddParticipant} onMarkPaid={() => onMarkPaid(viewer.id)} onResetPaid={() => onResetPaid(viewer.id)} onConfirmPaid={onConfirmPaid} showAddPerson={showAddPerson} setShowAddPerson={setShowAddPerson} friends={state.friends} onSaveFriend={onSaveFriend} onDeleteFriend={onDeleteFriend} onAddFriendToRoom={onAddFriendToRoom} /></div>
     <footer className="room-footer"><span><span className="footer-mark">✦</span> SplitShare</span><span>Fair shares, good company.</span></footer>
   </main>;
 }
@@ -174,12 +187,13 @@ function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, isPar
 export default function App() {
   const [state, setState] = useState(() => getStoredState());
   const [mode, setMode] = useState('create');
-  const [form, setForm] = useState(() => { const profile = getStoredState().profile; return { name: profile?.name || '', instapayLink: profile?.instapayLink || profile?.instapayUsername || '', code: '', emoji: profile?.emoji || DEFAULT_EMOJIS[0] }; });
+  const [form, setForm] = useState(() => { const profile = getStoredState().profile; return { name: profile?.name || '', instapayLink: profile?.instapayLink || profile?.instapayUsername || '', instapayShareCode: profile?.instapayShareCode || '', code: '', emoji: profile?.emoji || DEFAULT_EMOJIS[0] }; });
   const [error, setError] = useState('');
   const [receiptImage, setReceiptImage] = useState('');
   const [pendingFile, setPendingFile] = useState(null);
   const [isParsing, setIsParsing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [summaryCopied, setSummaryCopied] = useState(false);
   const [syncError, setSyncError] = useState('');
   const stateRef = useRef(state);
   const syncQueueRef = useRef(Promise.resolve());
@@ -193,25 +207,60 @@ export default function App() {
     const code = state.room?.code;
     if (!code) return undefined;
     let active = true;
-    const pullRoom = async () => {
+    let fallbackTimer = null;
+    let eventSequence = 0;
+    const applyRoom = (room) => {
+      if (!active || room?.code !== code || dirtyRoomRef.current || stateRef.current.room?.code !== code) return;
+      if (JSON.stringify(room) !== JSON.stringify(stateRef.current.room)) {
+        const next = { ...stateRef.current, room };
+        stateRef.current = next;
+        setState(next);
+        saveStoredState(next);
+      }
+    };
+    const pullRoom = async (sequence = eventSequence) => {
       if (dirtyRoomRef.current) return;
       try {
         const room = await getRemoteRoom(code);
-        if (!active || dirtyRoomRef.current || stateRef.current.room?.code !== code) return;
-        if (JSON.stringify(room) !== JSON.stringify(stateRef.current.room)) {
-          const next = { ...stateRef.current, room };
-          stateRef.current = next;
-          setState(next);
-          saveStoredState(next);
-        }
+        if (!active || sequence !== eventSequence) return;
+        applyRoom(room);
         setSyncError('');
       } catch (error) {
         if (active) setSyncError(syncErrorMessage(error));
       }
     };
-    pullRoom();
-    const timer = setInterval(pullRoom, 2000);
-    return () => { active = false; clearInterval(timer); };
+    const clearFallback = () => {
+      if (!fallbackTimer) return;
+      clearInterval(fallbackTimer);
+      fallbackTimer = null;
+    };
+    const startFallback = () => {
+      if (fallbackTimer) return;
+      pullRoom();
+      fallbackTimer = setInterval(pullRoom, 2000);
+    };
+    let closeChannel;
+    try {
+      closeChannel = subscribeToRoom(code, {
+        onOpen: () => {
+          clearFallback();
+          setSyncError('');
+          pullRoom(eventSequence);
+        },
+        onRoom: (room) => {
+          eventSequence += 1;
+          applyRoom(room);
+        },
+        onError: () => {
+          if (!active) return;
+          setSyncError('Sync server unavailable.');
+          pullRoom();
+        },
+      });
+    } catch {
+      startFallback();
+    }
+    return () => { active = false; clearFallback(); closeChannel?.(); };
   }, [state.room?.code]);
 
   const queueRemoteRoom = (room) => {
@@ -258,9 +307,10 @@ export default function App() {
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.instapayLink.trim()) return setError('Add your name and InstaPay shareable link to continue.');
+    if (!isValidInstapayShareCode(form.instapayShareCode)) return setError('Use 1–32 letters or numbers for the share code.');
     let link;
     try { const url = new URL(form.instapayLink.trim()); if (!isValidInstapayLink(form.instapayLink)) throw new Error(); link = url.href; } catch { return setError('Enter a valid InstaPay shareable link.'); }
-    const profile = { name: form.name.trim(), instapayLink: link, emoji: form.emoji };
+    const profile = { name: form.name.trim(), instapayLink: link, instapayShareCode: form.instapayShareCode.trim(), emoji: form.emoji };
     const savedState = { ...stateRef.current, profile };
     stateRef.current = savedState;
     saveStoredState(savedState);
@@ -277,7 +327,8 @@ export default function App() {
 
   const handleJoin = async () => {
     if (!form.name.trim() || form.code.length !== 6) return setError('Add your name and the six-character room code.');
-    const profile = { name: form.name.trim(), instapayLink: stateRef.current.profile?.instapayLink || '', emoji: form.emoji };
+    if (!isValidInstapayShareCode(form.instapayShareCode)) return setError('Use 1–32 letters or numbers for the share code.');
+    const profile = { name: form.name.trim(), instapayLink: stateRef.current.profile?.instapayLink || '', instapayShareCode: form.instapayShareCode.trim(), emoji: form.emoji };
     try {
       const room = await getRemoteRoom(form.code.toUpperCase());
       const joinedRoom = joinRoom(room, profile);
@@ -332,12 +383,23 @@ export default function App() {
   const handleResetPaid = (participantId) => updateRoom((room) => resetParticipantPaid(room, participantId));
   const handleConfirmPaid = (participantId) => { if (stateRef.current.room?.ownerId !== stateRef.current.profile?.id) return; updateRoom((room) => confirmParticipantPaid(room, participantId)); };
   const handleCopyInvite = async () => { try { if (!navigator.clipboard) return; await navigator.clipboard.writeText(state.room.code); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { /* clipboard is optional in local previews */ } };
+  const handleCopySummary = async () => { try { if (!navigator.clipboard) return; await navigator.clipboard.writeText(buildRoomSummary(stateRef.current.room)); setSummaryCopied(true); setTimeout(() => setSummaryCopied(false), 1800); } catch { /* clipboard is optional in local previews */ } };
   const handleAddParticipant = (name, emoji) => updateRoom((room) => joinRoom(room, { name, instapayLink: '', emoji }));
   const handleSaveFriend = (friend, friendId) => updateFriends(friendId ? updateFriend(stateRef.current.friends, friendId, friend) : [...stateRef.current.friends, createFriend(friend)]);
   const handleDeleteFriend = (friendId) => updateFriends(removeFriend(stateRef.current.friends, friendId));
   const handleAddFriendToRoom = (friend) => updateRoom((room) => joinRoom(room, friend));
-  const handleLogout = () => { const cleared = { ...stateRef.current, room: null }; dirtyRoomRef.current = null; if (syncRetryRef.current) clearTimeout(syncRetryRef.current); syncRetryRef.current = null; stateRef.current = cleared; saveStoredState(cleared); setState(cleared); setSyncError(''); setReceiptImage(''); setPendingFile(null); setCopied(false); setForm({ name: cleared.profile?.name || '', instapayLink: cleared.profile?.instapayLink || '', code: '', emoji: cleared.profile?.emoji || DEFAULT_EMOJIS[0] }); };
+  const handleSaveProfile = (changes) => {
+    const current = stateRef.current;
+    const profile = { ...current.profile, ...changes };
+    stateRef.current = { ...current, profile };
+    saveStoredState(stateRef.current);
+    setState(stateRef.current);
+    const participant = current.room?.participants.find((person) => person.id === current.profile.id) || current.room?.participants.find((person) => person.name === current.profile.name);
+    if (!participant) return;
+    updateRoom((room) => ({ ...room, participants: room.participants.map((person) => person.id === participant.id ? { ...person, name: profile.name, instapayShareCode: profile.instapayShareCode, emoji: profile.emoji, initials: profile.name.split(/\s+/).map((word) => word[0]).join('').slice(0, 2).toUpperCase() } : person) }));
+  };
+  const handleLogout = () => { const cleared = { ...stateRef.current, room: null }; dirtyRoomRef.current = null; if (syncRetryRef.current) clearTimeout(syncRetryRef.current); syncRetryRef.current = null; stateRef.current = cleared; saveStoredState(cleared); setState(cleared); setSyncError(''); setReceiptImage(''); setPendingFile(null); setCopied(false); setSummaryCopied(false); setForm({ name: cleared.profile?.name || '', instapayLink: cleared.profile?.instapayLink || '', instapayShareCode: cleared.profile?.instapayShareCode || '', code: '', emoji: cleared.profile?.emoji || DEFAULT_EMOJIS[0] }); };
 
   if (!state.profile || !state.room) return <Welcome mode={mode} setMode={(nextMode) => { setMode(nextMode); setError(''); }} form={form} setForm={setForm} onCreate={handleCreate} onJoin={handleJoin} error={error} />;
-  return <RoomView state={state} onLogout={handleLogout} onUpload={handleUpload} onAnalyze={handleAnalyze} onManualReceipt={handleManualReceipt} isParsing={isParsing} receiptImage={receiptImage} onItemChange={handleItemChange} onFeeChange={handleFeeChange} onAddItem={handleAddItem} onToggleAssignment={handleToggleAssignment} onCopyInvite={handleCopyInvite} copied={copied} onAddParticipant={handleAddParticipant} onMarkPaid={handleMarkPaid} onResetPaid={handleResetPaid} onConfirmPaid={handleConfirmPaid} onSaveFriend={handleSaveFriend} onDeleteFriend={handleDeleteFriend} onAddFriendToRoom={handleAddFriendToRoom} syncError={syncError} />;
+  return <RoomView state={state} onLogout={handleLogout} onUpload={handleUpload} onAnalyze={handleAnalyze} onManualReceipt={handleManualReceipt} isParsing={isParsing} receiptImage={receiptImage} onItemChange={handleItemChange} onFeeChange={handleFeeChange} onAddItem={handleAddItem} onToggleAssignment={handleToggleAssignment} onCopyInvite={handleCopyInvite} copied={copied} onCopySummary={handleCopySummary} summaryCopied={summaryCopied} onAddParticipant={handleAddParticipant} onMarkPaid={handleMarkPaid} onResetPaid={handleResetPaid} onConfirmPaid={handleConfirmPaid} onSaveFriend={handleSaveFriend} onDeleteFriend={handleDeleteFriend} onAddFriendToRoom={handleAddFriendToRoom} onSaveProfile={handleSaveProfile} syncError={syncError} />;
 }

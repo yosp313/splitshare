@@ -20,6 +20,6 @@ assert.deepEqual(removeFriend(updated, friend.id), []);
 
 saveStoredState({ profile: { name: 'Mina', instapayLink: 'https://ipn.eg/S/mina/instapay/demo', emoji: '🍕' }, room: null, friends: updated });
 const restored = getStoredState();
-assert.deepEqual(restored.profile, { name: 'Mina', instapayLink: 'https://ipn.eg/S/mina/instapay/demo', emoji: '🍕' });
+assert.deepEqual(restored.profile, { name: 'Mina', instapayLink: 'https://ipn.eg/S/mina/instapay/demo', instapayShareCode: '', emoji: '🍕' });
 assert.deepEqual(restored.friends, updated);
 console.log('friend checks passed: profile migration and friend CRUD persistence');

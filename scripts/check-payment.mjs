@@ -8,11 +8,21 @@ assert.equal(host.instapayLink, instapayLink);
 assert.equal(getSettlementStatus(host), SETTLEMENT_STATUS.UNPAID);
 assert.equal(host.settled, false);
 assert.equal(buildInstapayLink(host.instapayLink), instapayLink);
+const configuredRoom = createRoom({ name: 'Mina', instapayLink: 'mina.pay', instapayShareCode: 'Ab12Z9' });
+assert.equal(configuredRoom.participants[0].instapayShareCode, 'Ab12Z9');
+assert.equal(buildInstapayLink('mina.pay', configuredRoom.participants[0].instapayShareCode), 'https://ipn.eg/S/mina.pay/instapay/Ab12Z9');
+assert.equal(buildInstapayLink('mina.pay', 'bad code'), 'https://ipn.eg/S/mina.pay/instapay/23bZwC');
+assert.equal(buildInstapayLink(instapayLink, 'different'), instapayLink);
 
 const storage = new Map();
 globalThis.localStorage = { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) };
 saveStoredState({ profile: { name: host.name, instapayLink: host.instapayLink }, room });
 assert.equal(JSON.parse(storage.get('splitshare-state-v1')).profile.instapayLink, instapayLink);
+assert.equal(getStoredState().profile.instapayShareCode, '');
+assert.equal(getStoredState().room.participants[0].instapayShareCode, '');
+
+const joinedWithCode = joinRoom(configuredRoom, { name: 'Omar', instapayLink: 'omar.pay', instapayShareCode: 'Q7rT2' });
+assert.equal(joinedWithCode.participants[1].instapayShareCode, 'Q7rT2');
 
 const friendRoom = joinRoom(room, { name: 'Mina' });
 const markedRoom = markParticipantPaid(friendRoom, friendRoom.participants[1].id);

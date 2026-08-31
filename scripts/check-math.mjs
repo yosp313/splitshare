@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calculateShares, calculateReceiptTotal } from '../src/lib/splitShareStore.js';
+import { buildRoomSummary, calculateShares, calculateReceiptTotal } from '../src/lib/splitShareStore.js';
 
 const receipt = {
   items: [
@@ -18,4 +18,5 @@ assert.equal(shares.friend.items, 120);
 assert.equal(shares.me.amount, 189.71);
 assert.equal(shares.friend.amount, 142.29);
 assert.equal(shares.me.amount + shares.friend.amount, 332);
+assert.equal(buildRoomSummary({ code: 'ABC123', receipt, participants: [{ id: 'me', name: 'Mina' }, { id: 'friend', name: 'Omar' }] }), 'SplitShare — Room ABC123\nMina — EGP 189.71\nOmar — EGP 142.29');
 console.log('math checks passed: total 332, split 189.71 / 142.29');
