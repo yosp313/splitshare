@@ -190,7 +190,6 @@ h1 em, h2 em { font-family: 'Playfair Display', serif; font-weight: 600; letter-
 .share-link:hover { color: #fff; }
 .share-link.is-copied { color: var(--yellow); animation: copy-pop .45s cubic-bezier(.22, 1, .36, 1); }
 .share-link.is-error { color: var(--coral); }
-.people-block { padding: 0 1px; }
 .icon-button { display: grid; place-items: center; width: 36px; height: 36px; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 50%; }
 .icon-button:hover { background: var(--yellow); border-color: var(--yellow); }
 .people-list { margin-top: 18px; border-top: 1px solid var(--line); }
