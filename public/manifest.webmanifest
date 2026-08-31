@@ -1,0 +1,10 @@
+{
+  "name": "SplitShare — Shared receipt splitting",
+  "short_name": "SplitShare",
+  "description": "Scan a receipt, invite your table, and settle up simply.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f2ea",
+  "theme_color": "#111111",
+  "icons": [{ "src": "/icon.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

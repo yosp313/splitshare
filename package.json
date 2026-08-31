@@ -1,0 +1,22 @@
+{
+  "name": "splitshare",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": { "node": ">=22.5.0" },
+  "scripts": {
+    "dev": "vite",
+    "server": "node server/sync-server.mjs",
+    "check:sync": "node scripts/check-sync.mjs",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "tesseract.js": "latest"
+  },
+  "devDependencies": {}
+}
