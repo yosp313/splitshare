@@ -72,9 +72,9 @@ function Welcome({ mode, setMode, form, setForm, onCreate, onJoin, error }) {
         </>}
         <div className="form-stack">
           <div className="emoji-field"><span className="field-label">Profile picture</span><EmojiPicker value={form.emoji} onChange={(emoji) => setForm({ ...form, emoji })} /></div>
-          {mode === 'create' && <label>What should we call you<input autoFocus value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Mina" /></label>}
+          {mode === 'create' && <label>What should we call you<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Mina" /></label>}
           {mode === 'create' && <label>InstaPay shareable link<input value={form.instapayLink} onChange={(event) => setForm({ ...form, instapayLink: event.target.value.trim().slice(0, 200) })} placeholder="https://ipn.eg/S/..." autoCapitalize="none" autoCorrect="off" /></label>}
-          {mode === 'join' && <label>Your name<input autoFocus value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Omar" /></label>}
+          {mode === 'join' && <label>Your name<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Omar" /></label>}
           {mode === 'join' && <label>Room code<input className="code-input" value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value.toUpperCase().slice(0, 6) })} placeholder="A8K2QF" maxLength={6} /></label>}
         </div>
         {error && <p className="form-error" role="alert">{error}</p>}

@@ -92,6 +92,10 @@ h1 em, h2 em { font-family: 'Playfair Display', serif; font-weight: 600; letter-
 .foot-rule { width: 60px; height: 1px; background: var(--line); }
 .welcome-foot .foot-right { margin-left: auto; text-transform: none; letter-spacing: .02em; }
 
+@media (min-width: 821px) and (max-width: 1000px) {
+  .welcome-grid { grid-template-columns: minmax(0, 1fr) minmax(330px, 360px); gap: 32px; }
+}
+
 /* Room */
 .room-page { min-height: 100vh; min-height: 100svh; padding: 26px 5.7vw 18px; }
 .app-header { display: flex; align-items: center; justify-content: space-between; max-width: 1280px; margin: 0 auto; padding-bottom: 25px; border-bottom: 1px solid var(--line); }
