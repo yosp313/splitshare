@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;1,600;1,700&display=swap');
 
 :root { font-family: 'Manrope', sans-serif; color: #111; background: #f5f2ea; color-scheme: light; font-synthesis: none; --ink: #111; --muted: #746f65; --line: #ded9cd; --paper: #fbfaf6; --yellow: #f4c63d; --coral: #e27a55; --blue: #6d7fce; }
+*[data-theme="dark"] { color-scheme: dark; }
+[data-theme="dark"] { --ink: #e8e6e1; --muted: #aaa8a0; --line: #3a3c53; --paper: #25263a; --yellow: #f4c63d; --coral: #e27a55; --blue: #6d7fce; background: #1a1a2e; color: var(--ink); }
 * { box-sizing: border-box; }
 * { scrollbar-color: #c9c1b1 var(--ground, #f5f2ea); scrollbar-width: thin; }
 html, body, #root { min-height: 100%; }
@@ -333,3 +335,116 @@ h1 em, h2 em { font-family: 'Playfair Display', serif; font-weight: 600; letter-
 @keyframes form-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes copy-pop { 50% { transform: scale(1.03); } }
 @keyframes check-in { from { opacity: 0; transform: scale(.5) rotate(-25deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+
+/* ===== Dark theme overrides ===== */
+[data-theme="dark"] body { background: var(--ground, #12122a); }
+[data-theme="dark"] * { --scroll-bg: #12122a; }
+[data-theme="dark"] {
+  --ground: #12122a;
+  --ground-soft: #1a1a3a;
+  --ink-soft: #e8e6e1;
+  --muted-soft: #aaa8a0;
+  --accent-soft: #465a9e;
+  --warm-soft: #8d804d;
+  --error-bg: #3a2222;
+  --warn-bg: #3a321e;
+}
+
+/* scrollbars */
+[data-theme="dark"] * { scrollbar-color: #5a5c73 var(--ground, #12122a) !important; }
+
+/* base text / placeholders */
+[data-theme="dark"] input::placeholder { color: #8a877d; }
+[data-theme="dark"] ::selection { background: var(--yellow); }
+
+/* eyebrow, hero text, labels, hints, privacy note */
+[data-theme="dark"] .eyebrow, [data-theme="dark"] .hero-note { color: var(--muted-soft); }
+[data-theme="dark"] .hero-lede { color: var(--muted-soft); }
+[data-theme="dark"] .mode-switch button { color: #8b867b; }
+[data-theme="dark"] .mode-switch button.active { color: var(--ink-soft); border-color: var(--ink-soft); }
+[data-theme="dark"] .entry-card { box-shadow: 0 18px 38px rgba(0,0,0,.30), 0 3px 8px rgba(0,0,0,.20); }
+[data-theme="dark"] .form-stack label, [data-theme="dark"] .form-stack input,
+[data-theme="dark"] .form-stack label:focus-within { color: var(--muted-soft); }
+[data-theme="dark"] .form-stack input { background: var(--ground-soft); border-color: var(--line); }
+[data-theme="dark"] .form-stack input:hover, [data-theme="dark"] .add-person-form input:hover, [data-theme="dark"] .money-input:hover { border-color: var(--line); }
+[data-theme="dark"] .input-with-prefix { background: var(--ground-soft); border-color: var(--line); }
+[data-theme="dark"] .field-hint, [data-theme="dark"] .field-label { color: var(--muted-soft); }
+[data-theme="dark"] .privacy-note { color: var(--muted-soft); }
+[data-theme="dark"] .form-error { background: var(--error-bg); color: #e29a8a; }
+
+/* emoji picker */
+[data-theme="dark"] .emoji-option { background: var(--ground-soft); border-color: var(--line); }
+
+/* items / receipt */
+[data-theme="dark"] .item-row { border-color: var(--line); }
+[data-theme="dark"] .item-qty input { background: var(--ground-soft); }
+[data-theme="dark"] .item-assignee { color: var(--muted-soft); }
+[data-theme="dark"] .item-price span, [data-theme="dark"] .money-input span { color: var(--muted-soft); }
+[data-theme="dark"] .read-value, [data-theme="dark"] .money-input, [data-theme="dark"] .total-value { background: var(--ground-soft); border-color: var(--line); }
+[data-theme="dark"] .total-field .total-value { background: var(--warn-bg); border-color: #8d804d; }
+[data-theme="dark"] .receipt-photo { background: #3a3835; }
+[data-theme="dark"] .receipt-panel-top h2 span, [data-theme="dark"] .friends-panel-head h2 span { color: var(--muted-soft); }
+[data-theme="dark"] .claim-item { background: var(--ground-soft); color: var(--muted-soft); border-color: var(--line); }
+[data-theme="dark"] .claim-item.is-claimed, [data-theme="dark"] .claim-item:hover { background: var(--warn-bg); color: var(--ink-soft); border-color: var(--yellow); }
+[data-theme="dark"] .claim-item.is-claimed svg { color: var(--warm-soft); }
+[data-theme="dark"] .loader { border-color: var(--ground-soft); border-top-color: var(--coral); }
+
+/* story section */
+[data-theme="dark"] .story-stage { background: rgba(30,30,52,.64); box-shadow: 5px 5px 0 rgba(0,0,0,.20); }
+
+/* buttons */
+[data-theme="dark"] .button-dark { color: #fff; background: var(--paper); }
+[data-theme="dark"] .button-dark:hover { background: #303148; }
+[data-theme="dark"] .button-quiet:hover { background: rgba(255,255,255,.06); }
+[data-theme="dark"] .button-yellow:hover { background: #ffd65b; box-shadow: 0 7px 16px rgba(244,198,61,.22); }
+
+/* receipt panel, analyze / parsing cards */
+[data-theme="dark"] .analyze-banner, [data-theme="dark"] .parsing-card { background: var(--paper); }
+
+/* sidebar */
+[data-theme="dark"] .invite-card { color: var(--ink-soft); background: var(--paper); }
+[data-theme="dark"] .invite-card .section-kicker { color: var(--muted-soft); }
+[data-theme="dark"] .invite-card p { color: #b0ada9; }
+[data-theme="dark"] .invite-code { color: #fff; background: #2b2b29; border-color: #44423e; }
+[data-theme="dark"] .invite-code svg { color: #aaa69d; }
+[data-theme="dark"] .invite-code.is-copied { background: #3b392f; }
+[data-theme="dark"] .share-link { color: var(--accent-soft); }
+[data-theme="dark"] .share-link:hover { color: #fff; }
+[data-theme="dark"] .icon-button { color: var(--ink-soft); border-color: var(--line); }
+[data-theme="dark"] .icon-button:hover { background: var(--yellow); border-color: var(--yellow); }
+[data-theme="dark"] .people-list { border-top-color: var(--line); }
+[data-theme="dark"] .person-row { border-bottom-color: var(--line); }
+[data-theme="dark"] .person-row div span { color: var(--muted-soft); }
+[data-theme="dark"] .settled-check { color: #6fbf6f; }
+[data-theme="dark"] .confirm-settlement { color: #5fa65f; background: #2a403a; }
+[data-theme="dark"] .host-pill { color: var(--muted-soft); background: rgba(160,157,141,.15); }
+[data-theme="dark"] .add-person-form input { background: var(--ground-soft); }
+[data-theme="dark"] .add-person-form button { color: #fff; background: var(--paper); }
+
+/* friends panel */
+[data-theme="dark"] .friend-form-label, [data-theme="dark"] .friend-form input { background: var(--ground-soft); border-color: var(--line); }
+[data-theme="dark"] .friend-form label { color: var(--muted-soft); }
+[data-theme="dark"] .friends-panel-head h2 span { color: var(--muted-soft); }
+[data-theme="dark"] .friend-row { border-bottom-color: var(--line); }
+[data-theme="dark"] .friend-add { color: #4d4328; background: #fff7dc; border-color: #ebd79a; }
+[data-theme="dark"] .friend-add:disabled { color: var(--muted-soft); background: var(--ground-soft); border-color: var(--line); }
+[data-theme="dark"] .friend-icon:hover { background: var(--ground-soft); border-color: var(--ink-soft); color: var(--ink-soft); }
+
+/* you-owe section */
+[data-theme="dark"] .you-owe { background: var(--warn-bg); border-color: #8d804d; }
+[data-theme="dark"] .you-owe .section-kicker { color: var(--warm-soft); }
+[data-theme="dark"] .you-owe > span { color: var(--warm-soft); }
+[data-theme="dark"] .owe-heading svg { color: var(--warm-soft); }
+[data-theme="dark"] .owe-rule { background: var(--warm-soft); }
+[data-theme="dark"] .owe-breakdown { color: var(--warm-soft); }
+[data-theme="dark"] .owe-breakdown b { color: #4d4328; }
+[data-theme="dark"] .settlement-note { color: var(--warm-soft); }
+[data-theme="dark"] .settlement-confirmed { color: #6fbf6f; }
+
+/* footer */
+[data-theme="dark"] .room-footer { color: var(--muted-soft); }
+
+/* theme toggle button */
+[data-theme="dark"] .theme-toggle { color: var(--muted-soft); background: transparent; border: 1px solid var(--line); border-radius: 50%; }
+[data-theme="dark"] .theme-toggle:hover { color: var(--ink-soft); background: var(--yellow); border-color: var(--yellow); }
+[data-theme="dark"] .theme-toggle.is-active { color: var(--ink-soft); }

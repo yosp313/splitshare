@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createWorker } from 'tesseract.js';
+import { useTheme } from './contexts/ThemeContext.jsx';
 import { buildInstapayLink, buildRoomSummary, calculateReceiptTotal, calculateShares, confirmParticipantPaid, createFriend, createRoom, DEFAULT_EMOJIS, getSettlementStatus, getStoredState, isValidInstapayLink, isValidInstapayShareCode, joinRoom, markParticipantPaid, removeFriend, resetParticipantPaid, saveStoredState, SETTLEMENT_STATUS, updateFriend } from './lib/splitShareStore';
 import { parseReceiptText } from './lib/receiptParser';
 import { createRemoteRoom, getRemoteRoom, subscribeToRoom, updateRemoteRoom } from './lib/syncApi';
@@ -13,6 +14,7 @@ const iconPaths = {
   copy: 'M8 8V5h11v11h-3M5 8h11v11H5V8Z',
   edit: 'm14 6 4 4M5 19l3.4-.7L19 8a2.1 2.1 0 0 0-3-3L5.4 15.3 5 19Z',
   plus: 'M12 5v14M5 12h14',
+  sun: 'M12 4.5V2m0 14a5 5 0 1 0 0-10 5 5 0 0 0 0 10ZM4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.5 12H2m16 0h-2.5M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41',
   receipt: 'M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3 5h6M9 12h6M9 16h3',
   scan: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8M12 8v8',
   share: 'M18 8a3 3 0 1 0-2.8-4A3 3 0 0 0 15 5.3l-6.1 3.4a3 3 0 1 0 0 6.6l6.1 3.4A3 3 0 1 0 16 17l-6.1-3.4a3 3 0 0 0 0-2.6L16 7.6c.5.3 1.1.4 2 .4Z',
@@ -24,6 +26,22 @@ const iconPaths = {
 
 function Icon({ name, size = 18 }) {
   return <svg aria-hidden="true" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={iconPaths[name]} /></svg>;
+}
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === 'dark';
+  return (
+    <button
+      type="button"
+      className={`theme-toggle ${isDark ? 'is-active' : ''}`}
+      onClick={toggleTheme}
+      aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+      title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+    >
+      <Icon name="sun" size={18} />
+    </button>
+  );
 }
 
 function Brand() {
@@ -42,7 +60,7 @@ function EmojiPicker({ value, onChange, compact = false }) {
 
 function Welcome({ mode, setMode, form, setForm, onCreate, onJoin, error }) {
   return <main className="welcome-page">
-    <div className="welcome-nav"><Brand /><span className="nav-note">Made for the table</span></div>
+    <div className="welcome-nav"><Brand /><span className="nav-note">Made for the table</span><ThemeToggle /></div>
     <section className="welcome-grid">
       <div className="welcome-copy">
         <div className="eyebrow"><span className="eyebrow-dot" /> bill splitting, without the group chat math</div>
@@ -176,7 +194,7 @@ function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, isPar
   };
   return <main className="room-page">
 
-    <header className="app-header"><Brand /><div className="header-room"><span className="status-dot" /> Room <strong>{room.code}</strong>{syncError && <span className="sync-error" role="status">{syncError}</span>}</div><div className="header-actions"><button className="header-link" onClick={onLogout}>Leave room</button><button type="button" className="avatar-button" onClick={openProfile} aria-label="Edit profile" aria-expanded={Boolean(profileForm)}><Avatar person={viewer} small /></button></div></header>
+    <header className="app-header"><Brand /><div className="header-room"><span className="status-dot" /> Room <strong>{room.code}</strong>{syncError && <span className="sync-error" role="status">{syncError}</span>}</div><div className="header-actions"><button className="header-link" onClick={onLogout}>Leave room</button><ThemeToggle /><button type="button" className="avatar-button" onClick={openProfile} aria-label="Edit profile" aria-expanded={Boolean(profileForm)}><Avatar person={viewer} small /></button></div></header>
     {profileForm && <form className="profile-editor friend-form" onSubmit={(event) => { event.preventDefault(); saveProfile(); }} aria-label="Edit profile"><label>Name<input autoFocus value={profileForm.name} onChange={(event) => { setProfileForm({ ...profileForm, name: event.target.value }); setProfileError(''); }} /></label><label>InstaPay share code <span className="field-hint">optional</span><input value={profileForm.instapayShareCode} onChange={(event) => { setProfileForm({ ...profileForm, instapayShareCode: event.target.value.slice(0, 32) }); setProfileError(''); }} placeholder="e.g. 23bZwC" maxLength={32} autoCapitalize="none" autoCorrect="off" aria-describedby={profileError ? 'profile-form-error' : undefined} aria-invalid={Boolean(profileError)} /></label>{profileError && <p id="profile-form-error" className="form-error" role="alert">{profileError}</p>}<div className="friend-form-actions"><button type="submit" className="button button-dark">Save profile</button><button type="button" className="button button-quiet" onClick={() => setProfileForm(null)}>Cancel</button></div></form>}
 
     <div className="room-layout"><ReceiptEditor room={room} receipt={room.receipt} receiptImage={receiptImage} isParsing={isParsing} viewerId={viewer.id} onUpload={onUpload} onAnalyze={onAnalyze} onManualReceipt={onManualReceipt} onItemChange={onItemChange} onFeeChange={onFeeChange} onAddItem={onAddItem} onToggleAssignment={onToggleAssignment} /><RoomSidebar room={room} shares={shares} viewerId={viewer.id} onCopyInvite={onCopyInvite} copied={copied} onCopySummary={onCopySummary} summaryCopied={summaryCopied} summaryCopyError={summaryCopyError} onAddParticipant={onAddParticipant} onMarkPaid={() => onMarkPaid(viewer.id)} onResetPaid={() => onResetPaid(viewer.id)} onConfirmPaid={onConfirmPaid} showAddPerson={showAddPerson} setShowAddPerson={setShowAddPerson} friends={state.friends} onSaveFriend={onSaveFriend} onDeleteFriend={onDeleteFriend} onAddFriendToRoom={onAddFriendToRoom} /></div>
