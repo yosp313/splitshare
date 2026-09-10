@@ -7,16 +7,17 @@
   "scripts": {
     "dev": "vite",
     "server": "node server/sync-server.mjs",
+    "backup": "node scripts/backup.mjs",
     "check:sync": "node scripts/check-sync.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "tesseract.js": "latest"
+    "@vitejs/plugin-react": "6.1.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tesseract.js": "7.0.0",
+    "vite": "8.2.2"
   },
   "devDependencies": {}
 }

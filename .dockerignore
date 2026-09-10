@@ -1,0 +1,6 @@
+node_modules
+dist
+data/*.sqlite*
+.git
+graphify-out
+portfolio

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createWorker } from 'tesseract.js';
 import { useTheme } from './contexts/ThemeContext.jsx';
 import { buildInstapayLink, buildRoomSummary, calculateReceiptTotal, calculateShares, confirmParticipantPaid, createFriend, createRoom, DEFAULT_EMOJIS, getSettlementStatus, getStoredState, isValidInstapayLink, isValidInstapayShareCode, joinRoom, markParticipantPaid, removeFriend, resetParticipantPaid, saveStoredState, SETTLEMENT_STATUS, updateFriend } from './lib/splitShareStore';
 import { parseReceiptText } from './lib/receiptParser';
@@ -98,31 +97,36 @@ function Welcome({ mode, setMode, form, setForm, onCreate, onJoin, error }) {
         </div>
         {error && <p className="form-error" role="alert">{error}</p>}
         <button type="button" className="button button-dark button-full" onClick={mode === 'create' ? onCreate : onJoin}>{mode === 'create' ? 'Create my room' : 'Enter the room'} <Icon name="arrow" size={17} /></button>
-        <p className="privacy-note">Your details stay on this device for now.</p>
+        <p className="privacy-note">Your details stay on this device for now. Shared rooms auto-delete from the server after 48 hours.</p>
       </div>
     </section>
     <div className="welcome-foot"><span>01</span><span className="foot-rule" /><span>Scan · split · settle</span><span className="foot-right">A small tool for good nights</span></div>
   </main>;
 }
 
-function EmptyReceipt({ onUpload, onManualReceipt }) {
+function EmptyReceipt({ onUpload, onManualReceipt, onPasteReceipt }) {
+  const [pasteText, setPasteText] = useState('');
+  const [showPaste, setShowPaste] = useState(false);
   return <div className="empty-receipt">
     <div className="empty-art"><span className="art-ring ring-one" /><span className="art-ring ring-two" /><span className="art-paper"><Icon name="receipt" size={36} /></span><span className="art-star">✦</span></div>
     <span className="section-kicker">Your first move</span>
     <h2>Put the receipt<br /><em>on the table.</em></h2>
     <p>Take a photo or choose one from your camera roll. We’ll pull out the items and numbers.</p>
     <div className="receipt-actions"><label className="button button-yellow upload-button"><Icon name="camera" size={18} /> Upload receipt<input type="file" accept="image/*,.txt" onChange={onUpload} /></label><button className="button button-quiet manual-receipt" onClick={onManualReceipt}>Enter items manually</button></div>
+    <button type="button" className="button button-quiet manual-receipt" onClick={() => setShowPaste(!showPaste)} aria-expanded={showPaste}>Paste receipt text</button>
+    {showPaste && <div className="paste-receipt"><label>Paste receipt text<textarea value={pasteText} onChange={(event) => setPasteText(event.target.value)} placeholder={'2  Flat white  180\n1  Halloumi toast  240'} rows={5} /></label><button type="button" className="button button-dark" disabled={!pasteText.trim()} onClick={() => onPasteReceipt(pasteText)}>Use pasted text</button></div>}
     <span className="supported">JPG, PNG or a clear screenshot</span>
   </div>;
 }
 
-function ReceiptEditor({ room, receipt, receiptImage, isParsing, viewerId, onUpload, onAnalyze, onManualReceipt, onItemChange, onFeeChange, onAddItem, onToggleAssignment }) {
+function ReceiptEditor({ room, receipt, receiptImage, isParsing, ocrError, viewerId, onUpload, onAnalyze, onManualReceipt, onPasteReceipt, onItemChange, onFeeChange, onAddItem, onToggleAssignment }) {
 
   return <div className="receipt-column">
     <div className="content-heading"><div><span className="section-kicker">The shared receipt</span><h1>{receipt?.merchant || 'Add your receipt'}</h1></div>{receipt && <span className="receipt-date">{receipt.date}</span>}</div>
-    {!receipt && !receiptImage && <EmptyReceipt onUpload={onUpload} onManualReceipt={onManualReceipt} />}
+    {!receipt && !receiptImage && <EmptyReceipt onUpload={onUpload} onManualReceipt={onManualReceipt} onPasteReceipt={onPasteReceipt} />}
     {receiptImage && <div className={`receipt-photo ${isParsing ? 'is-parsing' : ''}`}><img src={receiptImage} alt="Uploaded receipt preview" /><div className="photo-overlay"><span>{isParsing ? 'Reading the receipt…' : 'Receipt photo'}</span>{isParsing && <span className="scan-line" />}</div></div>}
-    {receiptImage && !receipt && !isParsing && <div className="analyze-banner"><div><span className="mini-icon"><Icon name="spark" size={16} /></span><div><strong>Ready when you are</strong><span>We found a receipt image. Let’s turn it into a split.</span></div></div><button className="button button-dark" onClick={onAnalyze}>Analyze receipt <Icon name="arrow" size={16} /></button></div>}
+    {receiptImage && !receipt && !isParsing && !ocrError && <div className="analyze-banner"><div><span className="mini-icon"><Icon name="spark" size={16} /></span><div><strong>Ready when you are</strong><span>We found a receipt image. Let’s turn it into a split.</span></div></div><button className="button button-dark" onClick={onAnalyze}>Analyze receipt <Icon name="arrow" size={16} /></button></div>}
+    {receiptImage && !receipt && !isParsing && ocrError && <div className="analyze-banner" role="alert"><div><span className="mini-icon"><Icon name="spark" size={16} /></span><div><strong>Couldn’t read that photo</strong><span>Try again with a clearer shot, paste the text, or enter items manually.</span></div></div><div className="receipt-actions"><button className="button button-dark" onClick={onAnalyze}>Try again</button><button className="button button-quiet manual-receipt" onClick={onManualReceipt}>Enter manually</button></div></div>}
     {isParsing && <div className="parsing-card" role="status" aria-live="polite"><span className="loader" /><div><strong>Finding the details</strong><span>Looking for items, quantities, and totals…</span></div></div>}
     {receipt && !isParsing && <div className="receipt-panel">
       <div className="receipt-panel-top"><div><span className="section-kicker">Parsed details</span><h2>Receipt items <span>{receipt.items.length}</span></h2><p className="selection-hint">Tap “Add me” on the items you had.</p></div><label className="button button-quiet upload-again"><Icon name="camera" size={16} /> Replace<input type="file" accept="image/*,.txt" onChange={onUpload} /></label></div>
@@ -176,11 +180,10 @@ function FriendsPanel({ friends, room, onSave, onDelete, onAddToRoom }) {
   </section>;
 }
 
-function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, isParsing, receiptImage, onItemChange, onFeeChange, onAddItem, onToggleAssignment, onCopyInvite, copied, onCopySummary, summaryCopied, summaryCopyError, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, onSaveFriend, onDeleteFriend, onAddFriendToRoom, onSaveProfile, syncError }) {
+function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, onPasteReceipt, isParsing, ocrError, receiptImage, onItemChange, onFeeChange, onAddItem, onToggleAssignment, onCopyInvite, copied, onCopySummary, summaryCopied, summaryCopyError, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, onSaveFriend, onDeleteFriend, onAddFriendToRoom, onSaveProfile, syncError }) {
   const { room, profile } = state;
   const [showAddPerson, setShowAddPerson] = useState(false);
   const [profileForm, setProfileForm] = useState(null);
-  const [profileError, setProfileError] = useState('');
   const shares = useMemo(() => calculateShares(room.receipt, room.participants.map((person) => person.id)), [room.receipt, room.participants]);
   const viewer = room.participants.find((person) => person.id === profile.id) || room.participants.find((person) => person.name === profile.name) || room.participants[0];
   const openProfile = () => { setProfileForm({ name: profile.name, instapayShareCode: profile.instapayShareCode || '', emoji: profile.emoji || DEFAULT_EMOJIS[0] }); setProfileError(''); };
@@ -197,7 +200,7 @@ function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, isPar
     <header className="app-header"><Brand /><div className="header-room"><span className="status-dot" /> Room <strong>{room.code}</strong>{syncError && <span className="sync-error" role="status">{syncError}</span>}</div><div className="header-actions"><button className="header-link" onClick={onLogout}>Leave room</button><ThemeToggle /><button type="button" className="avatar-button" onClick={openProfile} aria-label="Edit profile" aria-expanded={Boolean(profileForm)}><Avatar person={viewer} small /></button></div></header>
     {profileForm && <form className="profile-editor friend-form" onSubmit={(event) => { event.preventDefault(); saveProfile(); }} aria-label="Edit profile"><label>Name<input autoFocus value={profileForm.name} onChange={(event) => { setProfileForm({ ...profileForm, name: event.target.value }); setProfileError(''); }} /></label><label>InstaPay share code <span className="field-hint">optional</span><input value={profileForm.instapayShareCode} onChange={(event) => { setProfileForm({ ...profileForm, instapayShareCode: event.target.value.slice(0, 32) }); setProfileError(''); }} placeholder="e.g. 23bZwC" maxLength={32} autoCapitalize="none" autoCorrect="off" aria-describedby={profileError ? 'profile-form-error' : undefined} aria-invalid={Boolean(profileError)} /></label>{profileError && <p id="profile-form-error" className="form-error" role="alert">{profileError}</p>}<div className="friend-form-actions"><button type="submit" className="button button-dark">Save profile</button><button type="button" className="button button-quiet" onClick={() => setProfileForm(null)}>Cancel</button></div></form>}
 
-    <div className="room-layout"><ReceiptEditor room={room} receipt={room.receipt} receiptImage={receiptImage} isParsing={isParsing} viewerId={viewer.id} onUpload={onUpload} onAnalyze={onAnalyze} onManualReceipt={onManualReceipt} onItemChange={onItemChange} onFeeChange={onFeeChange} onAddItem={onAddItem} onToggleAssignment={onToggleAssignment} /><RoomSidebar room={room} shares={shares} viewerId={viewer.id} onCopyInvite={onCopyInvite} copied={copied} onCopySummary={onCopySummary} summaryCopied={summaryCopied} summaryCopyError={summaryCopyError} onAddParticipant={onAddParticipant} onMarkPaid={() => onMarkPaid(viewer.id)} onResetPaid={() => onResetPaid(viewer.id)} onConfirmPaid={onConfirmPaid} showAddPerson={showAddPerson} setShowAddPerson={setShowAddPerson} friends={state.friends} onSaveFriend={onSaveFriend} onDeleteFriend={onDeleteFriend} onAddFriendToRoom={onAddFriendToRoom} /></div>
+    <div className="room-layout"><ReceiptEditor room={room} receipt={room.receipt} receiptImage={receiptImage} isParsing={isParsing} ocrError={ocrError} viewerId={viewer.id} onUpload={onUpload} onAnalyze={onAnalyze} onManualReceipt={onManualReceipt} onPasteReceipt={onPasteReceipt} onItemChange={onItemChange} onFeeChange={onFeeChange} onAddItem={onAddItem} onToggleAssignment={onToggleAssignment} /><RoomSidebar room={room} shares={shares} viewerId={viewer.id} onCopyInvite={onCopyInvite} copied={copied} onCopySummary={onCopySummary} summaryCopied={summaryCopied} summaryCopyError={summaryCopyError} onAddParticipant={onAddParticipant} onMarkPaid={() => onMarkPaid(viewer.id)} onResetPaid={() => onResetPaid(viewer.id)} onConfirmPaid={onConfirmPaid} showAddPerson={showAddPerson} setShowAddPerson={setShowAddPerson} friends={state.friends} onSaveFriend={onSaveFriend} onDeleteFriend={onDeleteFriend} onAddToRoom={onAddFriendToRoom} /></div>
     <footer className="room-footer"><span><span className="footer-mark">✦</span> SplitShare</span><span>Fair shares, good company.</span></footer>
   </main>;
 }
@@ -210,6 +213,7 @@ export default function App() {
   const [receiptImage, setReceiptImage] = useState('');
   const [pendingFile, setPendingFile] = useState(null);
   const [isParsing, setIsParsing] = useState(false);
+  const [ocrError, setOcrError] = useState(false);
   const [copied, setCopied] = useState(false);
   const [summaryCopied, setSummaryCopied] = useState(false);
   const [summaryCopyError, setSummaryCopyError] = useState(false);
@@ -218,7 +222,7 @@ export default function App() {
   const syncQueueRef = useRef(Promise.resolve());
   const dirtyRoomRef = useRef(null);
   const syncRetryRef = useRef(null);
-  const syncErrorMessage = (error) => error?.status === 404 ? 'Room not found on sync server.' : 'Sync server unavailable.';
+  const syncErrorMessage = (error) => error?.status === 404 ? 'Room not found on sync server.' : error?.status === 410 ? 'This room expired after 48 hours. Start a new split.' : 'Sync server unavailable.';
 
   useEffect(() => { stateRef.current = state; }, [state]);
 
@@ -296,7 +300,7 @@ export default function App() {
     }, (error) => {
       const isCurrentRoom = JSON.stringify(dirtyRoomRef.current) === JSON.stringify(room);
       setSyncError(syncErrorMessage(error));
-      if (error?.status === 404) {
+      if (error?.status === 404 || error?.status === 410) {
         if (isCurrentRoom) dirtyRoomRef.current = null;
         return;
       }
@@ -334,7 +338,14 @@ export default function App() {
     stateRef.current = savedState;
     saveStoredState(savedState);
     try {
-      const room = await createRemoteRoom(createRoom(profile));
+      let room = null;
+      for (let attempt = 0; attempt < 3 && !room; attempt += 1) {
+        try {
+          room = await createRemoteRoom(createRoom(profile));
+        } catch (error) {
+          if (error?.status !== 409 || attempt === 2) throw error;
+        }
+      }
       const nextState = { ...stateRef.current, profile: { ...profile, id: room.ownerId }, room };
       stateRef.current = nextState;
       saveStoredState(nextState);
@@ -364,6 +375,7 @@ export default function App() {
     const file = event.target.files?.[0];
     if (!file) return;
     setPendingFile(file);
+    setOcrError(false);
     const reader = new FileReader();
     reader.onload = () => setReceiptImage(reader.result);
     reader.readAsDataURL(file);
@@ -371,27 +383,42 @@ export default function App() {
 
   const handleAnalyze = async () => {
     setIsParsing(true);
+    setOcrError(false);
     let text = pendingFile?.type === 'text/plain' ? await pendingFile.text() : '';
+    let failed = false;
     if (pendingFile?.type.startsWith('image/')) {
       try {
+        const { createWorker } = await import('tesseract.js');
         const worker = await createWorker('eng');
         const result = await worker.recognize(pendingFile);
         text = result.data.text;
         await worker.terminate();
       } catch {
+        failed = true;
         text = '';
       }
+    }
+    if (failed || !text.trim()) {
+      setOcrError(true);
+      setIsParsing(false);
+      return;
     }
     await new Promise((resolve) => setTimeout(resolve, 350));
     const receipt = parseReceiptText(text);
     updateRoom((room) => ({ ...room, receipt }));
     setIsParsing(false);
   };
+  const handlePasteReceipt = (text) => {
+    setReceiptImage('');
+    setPendingFile(null);
+    setOcrError(false);
+    updateRoom((room) => ({ ...room, receipt: parseReceiptText(text) }));
+  };
 
   const updateReceipt = (updater) => updateRoom((room) => ({ ...room, receipt: updater(room.receipt) }));
   const handleItemChange = (id, key, value) => updateReceipt((receipt) => ({ ...receipt, items: receipt.items.map((item) => item.id === id ? { ...item, [key]: value } : item) }));
   const handleFeeChange = (key, value) => updateReceipt((receipt) => ({ ...receipt, [key]: Math.max(0, Number(value)) }));
-  const handleManualReceipt = () => { setReceiptImage(''); setPendingFile(null); updateRoom((room) => ({ ...room, receipt: { merchant: 'Manual receipt', date: 'Today', items: [], subtotal: 0, tax: 0, service: 0, total: 0 } })); };
+  const handleManualReceipt = () => { setReceiptImage(''); setPendingFile(null); setOcrError(false); updateRoom((room) => ({ ...room, receipt: { merchant: 'Manual receipt', date: 'Today', items: [], subtotal: 0, tax: 0, service: 0, total: 0 } })); };
   const handleAddItem = () => updateReceipt((receipt) => ({ ...receipt, items: [...receipt.items, { id: `item-${Date.now()}`, name: '', quantity: 1, price: 0, assignedTo: [] }] }));
   const handleToggleAssignment = (id, participantId) => updateReceipt((receipt) => ({ ...receipt, items: receipt.items.map((item) => {
     if (item.id !== id) return item;
@@ -401,6 +428,16 @@ export default function App() {
   const handleMarkPaid = (participantId) => updateRoom((room) => markParticipantPaid(room, participantId));
   const handleResetPaid = (participantId) => updateRoom((room) => resetParticipantPaid(room, participantId));
   const handleConfirmPaid = (participantId) => { if (stateRef.current.room?.ownerId !== stateRef.current.profile?.id) return; updateRoom((room) => confirmParticipantPaid(room, participantId)); };
+  const handleCopyInvite = async () => {
+    try {
+      if (!navigator.clipboard || !stateRef.current.room) return;
+      await navigator.clipboard.writeText(stateRef.current.room.code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  };
   const handleCopySummary = async () => {
     setSummaryCopyError(false);
     try {
@@ -430,5 +467,5 @@ export default function App() {
   const handleLogout = () => { const cleared = { ...stateRef.current, room: null }; dirtyRoomRef.current = null; if (syncRetryRef.current) clearTimeout(syncRetryRef.current); syncRetryRef.current = null; stateRef.current = cleared; saveStoredState(cleared); setState(cleared); setSyncError(''); setReceiptImage(''); setPendingFile(null); setCopied(false); setSummaryCopied(false); setSummaryCopyError(false); setForm({ name: cleared.profile?.name || '', instapayLink: cleared.profile?.instapayLink || '', instapayShareCode: cleared.profile?.instapayShareCode || '', code: '', emoji: cleared.profile?.emoji || DEFAULT_EMOJIS[0] }); };
 
   if (!state.profile || !state.room) return <Welcome mode={mode} setMode={(nextMode) => { setMode(nextMode); setError(''); }} form={form} setForm={setForm} onCreate={handleCreate} onJoin={handleJoin} error={error} />;
-  return <RoomView state={state} onLogout={handleLogout} onUpload={handleUpload} onAnalyze={handleAnalyze} onManualReceipt={handleManualReceipt} isParsing={isParsing} receiptImage={receiptImage} onItemChange={handleItemChange} onFeeChange={handleFeeChange} onAddItem={handleAddItem} onToggleAssignment={handleToggleAssignment} onCopyInvite={handleCopyInvite} copied={copied} onCopySummary={handleCopySummary} summaryCopied={summaryCopied} summaryCopyError={summaryCopyError} onAddParticipant={handleAddParticipant} onMarkPaid={handleMarkPaid} onResetPaid={handleResetPaid} onConfirmPaid={handleConfirmPaid} onSaveFriend={handleSaveFriend} onDeleteFriend={handleDeleteFriend} onAddFriendToRoom={handleAddFriendToRoom} onSaveProfile={handleSaveProfile} syncError={syncError} />;
+  return <RoomView state={state} onLogout={handleLogout} onUpload={handleUpload} onAnalyze={handleAnalyze} onManualReceipt={handleManualReceipt} onPasteReceipt={handlePasteReceipt} isParsing={isParsing} ocrError={ocrError} receiptImage={receiptImage} onItemChange={handleItemChange} onFeeChange={handleFeeChange} onAddItem={handleAddItem} onToggleAssignment={handleToggleAssignment} onCopyInvite={handleCopyInvite} copied={copied} onCopySummary={handleCopySummary} summaryCopied={summaryCopied} summaryCopyError={summaryCopyError} onAddParticipant={handleAddParticipant} onMarkPaid={handleMarkPaid} onResetPaid={handleResetPaid} onConfirmPaid={handleConfirmPaid} onSaveFriend={handleSaveFriend} onDeleteFriend={handleDeleteFriend} onAddFriendToRoom={handleAddFriendToRoom} onSaveProfile={handleSaveProfile} syncError={syncError} />;
 }
