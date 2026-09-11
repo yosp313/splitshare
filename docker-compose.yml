@@ -44,7 +44,7 @@ services:
   # Requires DNS pointed + port 80 public. Renew via host cron, then reload nginx.
   certbot:
     image: certbot/certbot:v2.11.0
-    entrypoint: /bin/sh -c 'ARGS="--register-unsafely-without-email"; [ -n "$CERTBOT_EMAIL" ] && ARGS="--email $CERTBOT_EMAIL --no-eff-email"; exec certbot certonly --webroot -w /var/www/certbot -d splitshare.youssef-ayman.me $ARGS --agree-tos --keep'
+    entrypoint: /bin/sh -c 'ARGS="--register-unsafely-without-email"; [ -n "$$CERTBOT_EMAIL" ] && ARGS="--email $$CERTBOT_EMAIL --no-eff-email"; exec certbot certonly --webroot -w /var/www/certbot -d splitshare.youssef-ayman.me $$ARGS --agree-tos --keep'
     environment:
       CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
     volumes:
