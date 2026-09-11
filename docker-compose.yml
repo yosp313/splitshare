@@ -9,8 +9,8 @@ services:
     build: .
     environment:
       NODE_ENV: production
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-https://splitshare.youssef-ayman.me}
       PORT: 3001
-      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-*}
     volumes:
       - splitshare-data:/app/data
     expose:
@@ -25,14 +25,36 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
+    entrypoint: /entrypoint.sh
     ports:
       - ${HTTP_PORT:-80}:80
+      - ${HTTPS_PORT:-443}:443
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.http-only.conf:/etc/nginx/nginx.http-only.conf:ro
+      - ./nginx-entrypoint.sh:/entrypoint.sh:ro
+      - letsencrypt-certs:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
     depends_on:
       app:
         condition: service_healthy
     restart: unless-stopped
 
+  # One-shot issuance (idempotent): runs on every `up`, exits when certs exist.
+  # Requires DNS pointed + port 80 public. Renew via host cron, then reload nginx.
+  certbot:
+    image: certbot/certbot:v2.11.0
+    entrypoint: /bin/sh -c 'ARGS="--register-unsafely-without-email"; [ -n "$CERTBOT_EMAIL" ] && ARGS="--email $CERTBOT_EMAIL --no-eff-email"; exec certbot certonly --webroot -w /var/www/certbot -d splitshare.youssef-ayman.me $ARGS --agree-tos --keep'
+    environment:
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}
+    volumes:
+      - letsencrypt-certs:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    depends_on:
+      nginx:
+        condition: service_started
+
 volumes:
   splitshare-data:
+  letsencrypt-certs:
+  certbot-webroot:
