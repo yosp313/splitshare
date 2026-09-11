@@ -57,9 +57,53 @@ function EmojiPicker({ value, onChange, compact = false }) {
   </div>;
 }
 
-function Welcome({ mode, setMode, form, setForm, onCreate, onJoin, error }) {
+function installPlatform() {
+  const ua = navigator.userAgent || '';
+  if (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  return 'desktop';
+}
+
+function InstallGuide({ canNativeInstall, onNativeInstall, onClose }) {
+  const [platform, setPlatform] = useState('desktop');
+  useEffect(() => {
+    setPlatform(installPlatform());
+    const onKey = (event) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return <div className="install-overlay" onClick={onClose}>
+    <div className="install-dialog" role="dialog" aria-modal="true" aria-label="Add SplitShare to your home screen" onClick={(event) => event.stopPropagation()}>
+      <div className="install-head"><div><span className="section-kicker">Take us to the table</span><h2>Add to home screen</h2></div><button type="button" className="icon-button install-close" onClick={onClose} aria-label="Close install guide"><Icon name="plus" size={18} /></button></div>
+      <p className="card-copy">SplitShare works best from your home screen — full-screen, one tap away, still fine on restaurant wifi.</p>
+      {canNativeInstall && <button type="button" className="button button-yellow button-full" onClick={onNativeInstall}><Icon name="share" size={16} /> Install SplitShare now</button>}
+      <div className="mode-switch" role="tablist" aria-label="Choose your device">
+        {[['ios', 'iPhone / iPad'], ['android', 'Android'], ['desktop', 'Computer']].map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={platform === id} className={platform === id ? 'active' : ''} onClick={() => setPlatform(id)}>{label}</button>)}
+      </div>
+      {platform === 'ios' && <ol className="install-steps">
+        <li>Open SplitShare in <strong>Safari</strong> — not Chrome or an in-app browser.</li>
+        <li>Tap the <strong>Share</strong> button in the toolbar.</li>
+        <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+        <li>Tap <strong>Add</strong>. SplitShare now opens full-screen from your home screen.</li>
+      </ol>}
+      {platform === 'android' && <ol className="install-steps">
+        <li>Open SplitShare in <strong>Chrome</strong>.</li>
+        <li>Tap the <strong>⋮ menu</strong> in the top corner.</li>
+        <li>Tap <strong>Add to Home screen</strong> or <strong>Install app</strong>.</li>
+        <li>Confirm — SplitShare now opens full-screen from your home screen.</li>
+      </ol>}
+      {platform === 'desktop' && <ol className="install-steps">
+        <li>Open SplitShare in <strong>Chrome or Edge</strong>.</li>
+        <li>Click the <strong>install icon</strong> in the address bar — or open the <strong>⋮ menu → Save and share → Install page as app</strong>.</li>
+        <li>Confirm — SplitShare opens in its own window, ready for the next dinner.</li>
+      </ol>}
+    </div>
+  </div>;
+}
+
+function Welcome({ mode, setMode, form, setForm, onCreate, onJoin, error, onInstall, isInstalled }) {
   return <main className="welcome-page">
-    <div className="welcome-nav"><Brand /><span className="nav-note">Made for the table</span><ThemeToggle /></div>
+    <div className="welcome-nav"><Brand /><span className="nav-note">Made for the table</span><div className="header-actions">{!isInstalled && <button type="button" className="header-link" onClick={onInstall}><Icon name="share" size={13} /> Install app</button>}<ThemeToggle /></div></div>
     <section className="welcome-grid">
       <div className="welcome-copy">
         <div className="eyebrow"><span className="eyebrow-dot" /> bill splitting, without the group chat math</div>
@@ -180,7 +224,7 @@ function FriendsPanel({ friends, room, onSave, onDelete, onAddToRoom }) {
   </section>;
 }
 
-function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, onPasteReceipt, isParsing, ocrError, receiptImage, onItemChange, onFeeChange, onAddItem, onToggleAssignment, onCopyInvite, copied, onCopySummary, summaryCopied, summaryCopyError, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, onSaveFriend, onDeleteFriend, onAddFriendToRoom, onSaveProfile, syncError }) {
+function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, onPasteReceipt, isParsing, ocrError, receiptImage, onItemChange, onFeeChange, onAddItem, onToggleAssignment, onCopyInvite, copied, onCopySummary, summaryCopied, summaryCopyError, onAddParticipant, onMarkPaid, onResetPaid, onConfirmPaid, onSaveFriend, onDeleteFriend, onAddFriendToRoom, onSaveProfile, syncError, onInstall, isInstalled }) {
   const { room, profile } = state;
   const [showAddPerson, setShowAddPerson] = useState(false);
   const [profileForm, setProfileForm] = useState(null);
@@ -197,7 +241,7 @@ function RoomView({ state, onLogout, onUpload, onAnalyze, onManualReceipt, onPas
   };
   return <main className="room-page">
 
-    <header className="app-header"><Brand /><div className="header-room"><span className="status-dot" /> Room <strong>{room.code}</strong>{syncError && <span className="sync-error" role="status">{syncError}</span>}</div><div className="header-actions"><button className="header-link" onClick={onLogout}>Leave room</button><ThemeToggle /><button type="button" className="avatar-button" onClick={openProfile} aria-label="Edit profile" aria-expanded={Boolean(profileForm)}><Avatar person={viewer} small /></button></div></header>
+    <header className="app-header"><Brand /><div className="header-room"><span className="status-dot" /> Room <strong>{room.code}</strong>{syncError && <span className="sync-error" role="status">{syncError}</span>}</div><div className="header-actions">{!isInstalled && <button type="button" className="header-link" onClick={onInstall}><Icon name="share" size={13} /> Install app</button>}<button className="header-link" onClick={onLogout}>Leave room</button><ThemeToggle /><button type="button" className="avatar-button" onClick={openProfile} aria-label="Edit profile" aria-expanded={Boolean(profileForm)}><Avatar person={viewer} small /></button></div></header>
     {profileForm && <form className="profile-editor friend-form" onSubmit={(event) => { event.preventDefault(); saveProfile(); }} aria-label="Edit profile"><label>Name<input autoFocus value={profileForm.name} onChange={(event) => { setProfileForm({ ...profileForm, name: event.target.value }); setProfileError(''); }} /></label><label>InstaPay share code <span className="field-hint">optional</span><input value={profileForm.instapayShareCode} onChange={(event) => { setProfileForm({ ...profileForm, instapayShareCode: event.target.value.slice(0, 32) }); setProfileError(''); }} placeholder="e.g. 23bZwC" maxLength={32} autoCapitalize="none" autoCorrect="off" aria-describedby={profileError ? 'profile-form-error' : undefined} aria-invalid={Boolean(profileError)} /></label>{profileError && <p id="profile-form-error" className="form-error" role="alert">{profileError}</p>}<div className="friend-form-actions"><button type="submit" className="button button-dark">Save profile</button><button type="button" className="button button-quiet" onClick={() => setProfileForm(null)}>Cancel</button></div></form>}
 
     <div className="room-layout"><ReceiptEditor room={room} receipt={room.receipt} receiptImage={receiptImage} isParsing={isParsing} ocrError={ocrError} viewerId={viewer.id} onUpload={onUpload} onAnalyze={onAnalyze} onManualReceipt={onManualReceipt} onPasteReceipt={onPasteReceipt} onItemChange={onItemChange} onFeeChange={onFeeChange} onAddItem={onAddItem} onToggleAssignment={onToggleAssignment} /><RoomSidebar room={room} shares={shares} viewerId={viewer.id} onCopyInvite={onCopyInvite} copied={copied} onCopySummary={onCopySummary} summaryCopied={summaryCopied} summaryCopyError={summaryCopyError} onAddParticipant={onAddParticipant} onMarkPaid={() => onMarkPaid(viewer.id)} onResetPaid={() => onResetPaid(viewer.id)} onConfirmPaid={onConfirmPaid} showAddPerson={showAddPerson} setShowAddPerson={setShowAddPerson} friends={state.friends} onSaveFriend={onSaveFriend} onDeleteFriend={onDeleteFriend} onAddToRoom={onAddFriendToRoom} /></div>
@@ -218,6 +262,9 @@ export default function App() {
   const [summaryCopied, setSummaryCopied] = useState(false);
   const [summaryCopyError, setSummaryCopyError] = useState(false);
   const [syncError, setSyncError] = useState('');
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true);
   const stateRef = useRef(state);
   const syncQueueRef = useRef(Promise.resolve());
   const dirtyRoomRef = useRef(null);
@@ -225,6 +272,23 @@ export default function App() {
   const syncErrorMessage = (error) => error?.status === 404 ? 'Room not found on sync server.' : error?.status === 410 ? 'This room expired after 48 hours. Start a new split.' : 'Sync server unavailable.';
 
   useEffect(() => { stateRef.current = state; }, [state]);
+  useEffect(() => {
+    const onPrompt = (event) => { event.preventDefault(); setInstallPrompt(event); };
+    const onInstalled = () => { setIsInstalled(true); setInstallPrompt(null); setShowInstallGuide(false); };
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => { window.removeEventListener('beforeinstallprompt', onPrompt); window.removeEventListener('appinstalled', onInstalled); };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      setInstallPrompt(null);
+      if (outcome === 'accepted') { setShowInstallGuide(false); return; }
+    }
+    setShowInstallGuide(true);
+  };
 
   useEffect(() => {
     const code = state.room?.code;
@@ -466,6 +530,7 @@ export default function App() {
   };
   const handleLogout = () => { const cleared = { ...stateRef.current, room: null }; dirtyRoomRef.current = null; if (syncRetryRef.current) clearTimeout(syncRetryRef.current); syncRetryRef.current = null; stateRef.current = cleared; saveStoredState(cleared); setState(cleared); setSyncError(''); setReceiptImage(''); setPendingFile(null); setCopied(false); setSummaryCopied(false); setSummaryCopyError(false); setForm({ name: cleared.profile?.name || '', instapayLink: cleared.profile?.instapayLink || '', instapayShareCode: cleared.profile?.instapayShareCode || '', code: '', emoji: cleared.profile?.emoji || DEFAULT_EMOJIS[0] }); };
 
-  if (!state.profile || !state.room) return <Welcome mode={mode} setMode={(nextMode) => { setMode(nextMode); setError(''); }} form={form} setForm={setForm} onCreate={handleCreate} onJoin={handleJoin} error={error} />;
-  return <RoomView state={state} onLogout={handleLogout} onUpload={handleUpload} onAnalyze={handleAnalyze} onManualReceipt={handleManualReceipt} onPasteReceipt={handlePasteReceipt} isParsing={isParsing} ocrError={ocrError} receiptImage={receiptImage} onItemChange={handleItemChange} onFeeChange={handleFeeChange} onAddItem={handleAddItem} onToggleAssignment={handleToggleAssignment} onCopyInvite={handleCopyInvite} copied={copied} onCopySummary={handleCopySummary} summaryCopied={summaryCopied} summaryCopyError={summaryCopyError} onAddParticipant={handleAddParticipant} onMarkPaid={handleMarkPaid} onResetPaid={handleResetPaid} onConfirmPaid={handleConfirmPaid} onSaveFriend={handleSaveFriend} onDeleteFriend={handleDeleteFriend} onAddFriendToRoom={handleAddFriendToRoom} onSaveProfile={handleSaveProfile} syncError={syncError} />;
+  const installGuide = showInstallGuide && <InstallGuide canNativeInstall={Boolean(installPrompt)} onNativeInstall={handleInstallClick} onClose={() => setShowInstallGuide(false)} />;
+  if (!state.profile || !state.room) return <><Welcome mode={mode} setMode={(nextMode) => { setMode(nextMode); setError(''); }} form={form} setForm={setForm} onCreate={handleCreate} onJoin={handleJoin} error={error} onInstall={handleInstallClick} isInstalled={isInstalled} />{installGuide}</>;
+  return <><RoomView state={state} onLogout={handleLogout} onUpload={handleUpload} onAnalyze={handleAnalyze} onManualReceipt={handleManualReceipt} onPasteReceipt={handlePasteReceipt} isParsing={isParsing} ocrError={ocrError} receiptImage={receiptImage} onItemChange={handleItemChange} onFeeChange={handleFeeChange} onAddItem={handleAddItem} onToggleAssignment={handleToggleAssignment} onCopyInvite={handleCopyInvite} copied={copied} onCopySummary={handleCopySummary} summaryCopied={summaryCopied} summaryCopyError={summaryCopyError} onAddParticipant={handleAddParticipant} onMarkPaid={handleMarkPaid} onResetPaid={handleResetPaid} onConfirmPaid={handleConfirmPaid} onSaveFriend={handleSaveFriend} onDeleteFriend={handleDeleteFriend} onAddFriendToRoom={handleAddFriendToRoom} onSaveProfile={handleSaveProfile} syncError={syncError} onInstall={handleInstallClick} isInstalled={isInstalled} />{installGuide}</>;
 }
