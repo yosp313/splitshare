@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 const ThemeContext = createContext();
 
@@ -11,8 +11,12 @@ export const useTheme = () => {
 export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => {
     if (typeof localStorage !== 'undefined') {
-      const stored = localStorage.getItem('splitshare-theme');
-      if (stored === 'light' || stored === 'dark') return stored;
+      try {
+        const stored = localStorage.getItem('splitshare-theme');
+        if (stored === 'light' || stored === 'dark') return stored;
+      } catch {
+        /* quota exceeded or disabled — fall through to system */
+      }
     }
     if (typeof window !== 'undefined' && window.matchMedia) {
       return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -20,15 +24,36 @@ export const ThemeProvider = ({ children }) => {
     return 'light';
   });
 
+  const toggleLock = useRef(false);
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    return () => {
+      document.documentElement.removeAttribute('data-theme');
+    };
   }, [theme]);
 
   useEffect(() => {
-    localStorage.setItem('splitshare-theme', theme);
+    try {
+      localStorage.setItem('splitshare-theme', theme);
+    } catch {
+      /* quota exceeded — silent degrade */
+    }
   }, [theme]);
 
-  const toggleTheme = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => setTheme(mq.matches ? 'dark' : 'light');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const toggleTheme = () => {
+    if (toggleLock.current) return;
+    toggleLock.current = true;
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+    setTimeout(() => { toggleLock.current = false; }, 250);
+  };
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
